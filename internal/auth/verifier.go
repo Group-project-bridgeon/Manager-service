@@ -98,7 +98,7 @@ func (v *Verifier) Verify(tokenString string) (*Principal, error) {
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			if claims.ExpiresAt != nil && claims.IssuedAt != nil && !claims.ExpiresAt.Time.After(claims.IssuedAt.Time) {
+			if claims.ExpiresAt != nil && claims.IssuedAt != nil && !claims.ExpiresAt.After(claims.IssuedAt.Time) {
 				return nil, ErrInvalidToken
 			}
 			return nil, ErrExpiredToken
@@ -114,10 +114,10 @@ func (v *Verifier) Verify(tokenString string) (*Principal, error) {
 	if claims.ExpiresAt == nil || claims.IssuedAt == nil || claims.NotBefore == nil {
 		return nil, ErrInvalidToken
 	}
-	if !claims.ExpiresAt.Time.After(claims.IssuedAt.Time) {
+	if !claims.ExpiresAt.After(claims.IssuedAt.Time) {
 		return nil, ErrInvalidToken
 	}
-	lifetime := claims.ExpiresAt.Time.Sub(claims.IssuedAt.Time)
+	lifetime := claims.ExpiresAt.Sub(claims.IssuedAt.Time)
 	if lifetime > 15*time.Minute {
 		return nil, ErrInvalidToken
 	}

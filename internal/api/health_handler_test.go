@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/group-project-bridgeon/manager-service/internal/api"
+	"github.com/group-project-bridgeon/manager-service/internal/auth"
 	"github.com/group-project-bridgeon/manager-service/internal/logger"
 )
 
@@ -77,6 +78,29 @@ func TestHealthEndpoints(t *testing.T) {
 
 		if w.Code != http.StatusServiceUnavailable {
 			t.Fatalf("expected 503, got %d", w.Code)
+		}
+	})
+
+	t.Run("health and ready stay public without auth header even when AuthVerifier configured", func(t *testing.T) {
+		priv, pub := generateTestRSAKeyPair(t)
+		_ = priv
+		verifier := auth.NewVerifier(pub, "erp-auth", "erp-api")
+
+		r := api.NewRouter(api.RouterConfig{
+			AppEnv:       "development",
+			Logger:       log,
+			Checker:      &mockReadinessChecker{err: nil},
+			AuthVerifier: verifier,
+		})
+
+		for _, path := range []string{"/healthz", "/readyz"} {
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			r.ServeHTTP(w, req)
+
+			if w.Code != http.StatusOK {
+				t.Fatalf("path %s expected 200 without auth, got %d", path, w.Code)
+			}
 		}
 	})
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -22,6 +23,8 @@ func NewWorkflowHandler(service *service.Service) *WorkflowHandler {
 
 // Submit handles POST /api/v1/approvals/submit.
 func (h *WorkflowHandler) Submit(c *gin.Context) {
+	principal := MustGetPrincipal(c)
+
 	var req SubmitApprovalRequestDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
 		Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid submission payload", []ErrorDetail{
@@ -30,7 +33,7 @@ func (h *WorkflowHandler) Submit(c *gin.Context) {
 		return
 	}
 
-	approval, err := h.service.Submit(c.Request.Context(), req.Service, req.ResourceID, req.RequesterID, req.Amount)
+	approval, err := h.service.Submit(c.Request.Context(), req.Service, req.ResourceID, principal.UserID.String(), req.Amount)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidAmount), errors.Is(err, domain.ErrInvalidResourceID), errors.Is(err, domain.ErrInvalidRequesterID):
@@ -46,16 +49,18 @@ func (h *WorkflowHandler) Submit(c *gin.Context) {
 
 // Approve handles POST /api/v1/approvals/:id/approve.
 func (h *WorkflowHandler) Approve(c *gin.Context) {
+	principal := MustGetPrincipal(c)
 	requestID := c.Param("id")
+
 	var req ActionRequestDTO
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
 		Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid action payload", []ErrorDetail{
 			{Field: "body", Message: err.Error()},
 		})
 		return
 	}
 
-	appr, err := h.service.Approve(c.Request.Context(), requestID, req.ActorID, req.Notes)
+	appr, err := h.service.Approve(c.Request.Context(), requestID, principal.UserID.String(), req.Notes)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrRequestNotFound):
@@ -79,16 +84,18 @@ func (h *WorkflowHandler) Approve(c *gin.Context) {
 
 // Reject handles POST /api/v1/approvals/:id/reject.
 func (h *WorkflowHandler) Reject(c *gin.Context) {
+	principal := MustGetPrincipal(c)
 	requestID := c.Param("id")
+
 	var req ActionRequestDTO
-	if err := c.ShouldBindJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil && !errors.Is(err, io.EOF) {
 		Error(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid action payload", []ErrorDetail{
 			{Field: "body", Message: err.Error()},
 		})
 		return
 	}
 
-	appr, err := h.service.Reject(c.Request.Context(), requestID, req.ActorID, req.Notes)
+	appr, err := h.service.Reject(c.Request.Context(), requestID, principal.UserID.String(), req.Notes)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrRequestNotFound):

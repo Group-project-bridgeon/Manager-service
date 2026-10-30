@@ -17,6 +17,9 @@ profile.pprof
 .env
 .env.*
 !.env.example
+keys/
+*.pem
+*.key
 
 # IDEs and Editors
 .idea/

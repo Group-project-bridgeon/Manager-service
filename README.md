@@ -19,3 +19,23 @@ Can a rejected bill be resubmitted, or does it need a new bill?
 Does a pending request expire?
 
 Also define the bill status lifecycle, which Purchasing must follow: draft → pending_approval → approved | rejected, and then what happens after approved (paid, received).
+
+## Authentication & Authorization
+
+Manager-service authenticates incoming requests using RS256 JSON Web Tokens (JWT) issued by the Authentication service. The verified JWT is the single source of truth for caller identity and permissions.
+
+### Environment Configuration
+
+| Variable | Description | Default | Required |
+| --- | --- | --- | --- |
+| `JWT_PUBLIC_KEY_PATH` | Path to RSA public key PEM file (min 2048 bits) | - | **Yes** |
+| `JWT_ISSUER` | Expected JWT issuer claim (`iss`) | `erp-auth` | No |
+| `JWT_AUDIENCE` | Expected JWT audience claim (`aud`) | `erp-api` | No |
+
+### Security Model
+- **Algorithm**: RS256 only. All symmetric algorithms (e.g., HS256) and "none" are rejected.
+- **Key Requirement**: RSA public key >= 2048 bits loaded from PEM file. Private keys are never mounted or accessed by Manager service.
+- **Token Verification**: Signature, `exp`, `iat`, `nbf`, `iss`, and `aud` are strictly validated with 0s clock leeway. Token lifetime (`exp - iat`) must not exceed 15 minutes.
+- **Caller Identity**: Extracted strictly from JWT `user_id` (and matching `sub`). Identity fields in request bodies (`requester_id`, `actor_id`) are not accepted.
+- **Route Authorization**: Route-level permissions matching exact global grants (`manager.approvals:submit`, `manager.approvals:read`, `manager.approvals:approve`, `manager.approvals:reject`, `manager.rbac:manage`, `manager.authz:check`).
+- **Known Limitation**: `token_version` is embedded in the token but not checked against an external revocation cache; revoked tokens remain valid until their maximum 15-minute expiration.

@@ -15,6 +15,11 @@ services:
       - WRITE_TIMEOUT=10s
       - IDLE_TIMEOUT=120s
       - SHUTDOWN_TIMEOUT=5s
+      - JWT_PUBLIC_KEY_PATH=/keys/jwt_public.pem
+      - JWT_ISSUER=erp-auth
+      - JWT_AUDIENCE=erp-api
+    volumes:
+      - ./keys/jwt_public.pem:/keys/jwt_public.pem:ro
 
   # Prepared for Phase 2 (Database Layer)
   postgres:

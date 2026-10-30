@@ -3,6 +3,7 @@ package config
 
 import (
 	"bufio"
+	"crypto/rsa"
 	"errors"
 	"fmt"
 	"net/url"
@@ -10,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/group-project-bridgeon/manager-service/internal/auth"
 )
 
 // Config holds all validated application configuration.
@@ -34,6 +37,12 @@ type Config struct {
 	DBMinConns        int32
 	DBMaxConnLifetime time.Duration
 	DBMaxConnIdleTime time.Duration
+
+	// JWT Configuration
+	JWTPublicKeyPath string
+	JWTIssuer        string
+	JWTAudience      string
+	JWTPublicKey     *rsa.PublicKey
 }
 
 // Load reads configuration from the environment and an optional .env file,
@@ -58,6 +67,9 @@ func Load() (*Config, error) {
 		DBMinConns:        getInt32Env("DB_MIN_CONNS", 5),
 		DBMaxConnLifetime: getDurationEnv("DB_MAX_CONN_LIFETIME", 1*time.Hour),
 		DBMaxConnIdleTime: getDurationEnv("DB_MAX_CONN_IDLE_TIME", 30*time.Minute),
+		JWTPublicKeyPath:  getEnv("JWT_PUBLIC_KEY_PATH", ""),
+		JWTIssuer:         getEnv("JWT_ISSUER", "erp-auth"),
+		JWTAudience:       getEnv("JWT_AUDIENCE", "erp-api"),
 	}
 
 	portStr := getEnv("PORT", "8080")
@@ -147,6 +159,26 @@ func (c *Config) validate() error {
 	if c.DBMinConns > c.DBMaxConns {
 		return fmt.Errorf("DB_MIN_CONNS (%d) cannot be greater than DB_MAX_CONNS (%d)", c.DBMinConns, c.DBMaxConns)
 	}
+
+	// JWT Validations
+	if strings.TrimSpace(c.JWTPublicKeyPath) == "" {
+		return errors.New("JWT_PUBLIC_KEY_PATH is required")
+	}
+	if strings.TrimSpace(c.JWTIssuer) == "" {
+		return errors.New("JWT_ISSUER cannot be empty")
+	}
+	if strings.TrimSpace(c.JWTAudience) == "" {
+		return errors.New("JWT_AUDIENCE cannot be empty")
+	}
+	keyBytes, err := os.ReadFile(c.JWTPublicKeyPath)
+	if err != nil {
+		return fmt.Errorf("failed to read JWT public key file from %q: %w", c.JWTPublicKeyPath, err)
+	}
+	pubKey, err := auth.ParseRSAPublicKeyPEM(keyBytes)
+	if err != nil {
+		return fmt.Errorf("invalid JWT public key: %w", err)
+	}
+	c.JWTPublicKey = pubKey
 
 	return nil
 }

@@ -1,14 +1,44 @@
 package config_test
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/group-project-bridgeon/manager-service/internal/config"
 )
 
+func writeTempRSAPublicKey(t *testing.T, bits int) string {
+	t.Helper()
+	priv, err := rsa.GenerateKey(rand.Reader, bits)
+	if err != nil {
+		t.Fatalf("failed to generate RSA key: %v", err)
+	}
+	pubASN1, err := x509.MarshalPKIXPublicKey(&priv.PublicKey)
+	if err != nil {
+		t.Fatalf("failed to marshal RSA public key: %v", err)
+	}
+	pubPEM := pem.EncodeToMemory(&pem.Block{
+		Type:  "PUBLIC KEY",
+		Bytes: pubASN1,
+	})
+
+	dir := t.TempDir()
+	keyPath := filepath.Join(dir, "jwt_public.pem")
+	if err := os.WriteFile(keyPath, pubPEM, 0600); err != nil {
+		t.Fatalf("failed to write temp public key: %v", err)
+	}
+	return keyPath
+}
+
 func TestConfigLoadDefaults(t *testing.T) {
+	keyPath := writeTempRSAPublicKey(t, 2048)
 	os.Clearenv()
+	_ = os.Setenv("JWT_PUBLIC_KEY_PATH", keyPath)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -30,10 +60,21 @@ func TestConfigLoadDefaults(t *testing.T) {
 	if cfg.DBName != "erp_manager" {
 		t.Errorf("expected default DBName 'erp_manager', got %s", cfg.DBName)
 	}
+	if cfg.JWTIssuer != "erp-auth" {
+		t.Errorf("expected default JWTIssuer 'erp-auth', got %s", cfg.JWTIssuer)
+	}
+	if cfg.JWTAudience != "erp-api" {
+		t.Errorf("expected default JWTAudience 'erp-api', got %s", cfg.JWTAudience)
+	}
+	if cfg.JWTPublicKey == nil {
+		t.Fatal("expected parsed JWTPublicKey, got nil")
+	}
 }
 
 func TestConfigDSN(t *testing.T) {
+	keyPath := writeTempRSAPublicKey(t, 2048)
 	os.Clearenv()
+	_ = os.Setenv("JWT_PUBLIC_KEY_PATH", keyPath)
 	_ = os.Setenv("DB_HOST", "db.internal")
 	_ = os.Setenv("DB_PORT", "5433")
 	_ = os.Setenv("DB_USER", "erp_user")
@@ -54,6 +95,14 @@ func TestConfigDSN(t *testing.T) {
 }
 
 func TestConfigValidation(t *testing.T) {
+	validKeyPath := writeTempRSAPublicKey(t, 2048)
+	smallKeyPath := writeTempRSAPublicKey(t, 1024)
+
+	invalidPEMPath := filepath.Join(t.TempDir(), "invalid.pem")
+	if err := os.WriteFile(invalidPEMPath, []byte("NOT A PEM"), 0600); err != nil {
+		t.Fatalf("failed to write invalid pem file: %v", err)
+	}
+
 	tests := []struct {
 		name    string
 		envKey  string
@@ -67,11 +116,16 @@ func TestConfigValidation(t *testing.T) {
 		{"invalid db port", "DB_PORT", "70000", true},
 		{"invalid ssl mode", "DB_SSLMODE", "unsupported_mode", true},
 		{"min conns greater than max conns", "DB_MIN_CONNS", "50", true},
+		{"missing jwt public key path", "JWT_PUBLIC_KEY_PATH", "", true},
+		{"non-existent jwt public key file", "JWT_PUBLIC_KEY_PATH", "/non/existent/path.pem", true},
+		{"rsa public key under 2048 bits", "JWT_PUBLIC_KEY_PATH", smallKeyPath, true},
+		{"invalid pem file content", "JWT_PUBLIC_KEY_PATH", invalidPEMPath, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			os.Clearenv()
+			_ = os.Setenv("JWT_PUBLIC_KEY_PATH", validKeyPath)
 			_ = os.Setenv(tt.envKey, tt.envVal)
 			if tt.name == "min conns greater than max conns" {
 				_ = os.Setenv("DB_MAX_CONNS", "20")

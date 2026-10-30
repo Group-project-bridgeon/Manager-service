@@ -38,6 +38,10 @@ func (h *WorkflowHandler) Submit(c *gin.Context) {
 		switch {
 		case errors.Is(err, domain.ErrInvalidAmount), errors.Is(err, domain.ErrInvalidResourceID), errors.Is(err, domain.ErrInvalidRequesterID):
 			Error(c, http.StatusBadRequest, "INVALID_INPUT", err.Error(), nil)
+		case errors.Is(err, domain.ErrDuplicateSubmission):
+			Error(c, http.StatusConflict, "DUPLICATE_SUBMISSION", "An active approval request already exists for this resource", nil)
+		case errors.Is(err, domain.ErrRequestAlreadyDecided):
+			Error(c, http.StatusConflict, "REQUEST_ALREADY_DECIDED", "This resource has already been approved", nil)
 		default:
 			RespondInternalError(c)
 		}
@@ -69,6 +73,10 @@ func (h *WorkflowHandler) Approve(c *gin.Context) {
 			Error(c, http.StatusForbidden, "SELF_APPROVAL_FORBIDDEN", "Requester cannot approve their own bill", nil)
 		case errors.Is(err, domain.ErrInsufficientRole):
 			Error(c, http.StatusForbidden, "INSUFFICIENT_ROLE", "Actor lacks manager approval authority", nil)
+		case errors.Is(err, domain.ErrDuplicateApproval):
+			Error(c, http.StatusConflict, "DUPLICATE_APPROVAL", "Actor has already approved a previous level for this request", nil)
+		case errors.Is(err, domain.ErrConcurrentUpdate):
+			Error(c, http.StatusConflict, "CONCURRENT_UPDATE", "Request was updated concurrently; please refresh and try again", nil)
 		case errors.Is(err, domain.ErrRequestAlreadyDecided):
 			Error(c, http.StatusConflict, "REQUEST_ALREADY_DECIDED", "Request is already decided", nil)
 		case errors.Is(err, domain.ErrRequestExpired):
@@ -100,6 +108,8 @@ func (h *WorkflowHandler) Reject(c *gin.Context) {
 		switch {
 		case errors.Is(err, domain.ErrRequestNotFound):
 			Error(c, http.StatusNotFound, "REQUEST_NOT_FOUND", "Approval request not found", nil)
+		case errors.Is(err, domain.ErrConcurrentUpdate):
+			Error(c, http.StatusConflict, "CONCURRENT_UPDATE", "Request was updated concurrently; please refresh and try again", nil)
 		case errors.Is(err, domain.ErrRequestAlreadyDecided):
 			Error(c, http.StatusConflict, "REQUEST_ALREADY_DECIDED", "Request is already decided", nil)
 		default:

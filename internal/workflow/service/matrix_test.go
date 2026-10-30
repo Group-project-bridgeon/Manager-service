@@ -15,12 +15,13 @@ import (
 
 // ThreadSafeMockWorkflowRepo provides a concurrent-safe mock repository for failure/concurrency tests.
 type ThreadSafeMockWorkflowRepo struct {
-	mu            sync.RWMutex
-	requests      map[string]domain.ApprovalRequest
-	actions       map[string][]domain.ApprovalAction
-	failOnAction  bool
-	failOnUpdate  bool
-	dbDown        bool
+	mu           sync.RWMutex
+	requests     map[string]domain.ApprovalRequest
+	actions      map[string][]domain.ApprovalAction
+	policy       *domain.ApprovalPolicy
+	failOnAction bool
+	failOnUpdate bool
+	dbDown       bool
 }
 
 func newThreadSafeMockWorkflowRepo() *ThreadSafeMockWorkflowRepo {
@@ -70,6 +71,21 @@ func (m *ThreadSafeMockWorkflowRepo) GetRequestByResource(ctx context.Context, s
 	return nil, domain.ErrRequestNotFound
 }
 
+func (m *ThreadSafeMockWorkflowRepo) GetActiveRequestByResource(ctx context.Context, serviceName, resourceID string) (*domain.ApprovalRequest, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.dbDown {
+		return nil, errors.New("database connection refused")
+	}
+	for _, req := range m.requests {
+		if req.Service == serviceName && req.ResourceID == resourceID && (req.Status == domain.StatusPending || req.Status == domain.StatusApproved) {
+			copyReq := req
+			return &copyReq, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *ThreadSafeMockWorkflowRepo) UpdateRequest(ctx context.Context, req domain.ApprovalRequest) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -90,8 +106,41 @@ func (m *ThreadSafeMockWorkflowRepo) RecordAction(ctx context.Context, action do
 	return nil
 }
 
+func (m *ThreadSafeMockWorkflowRepo) ApplyDecisionTx(ctx context.Context, req domain.ApprovalRequest, action domain.ApprovalAction, expectedLevel int, expectedStatus domain.Status) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.dbDown || m.failOnUpdate {
+		return errors.New("database error: failed to update request in tx")
+	}
+	existing, exists := m.requests[req.ID]
+	if !exists {
+		return domain.ErrRequestNotFound
+	}
+	if existing.CurrentLevel != expectedLevel || existing.Status != expectedStatus {
+		return domain.ErrConcurrentUpdate
+	}
+	if m.failOnAction {
+		// Simulates rollback: action failure aborts the update and leaves existing state unchanged
+		return errors.New("database error: action insertion failed, rolling back tx")
+	}
+	m.requests[req.ID] = req
+	m.actions[action.RequestID] = append(m.actions[action.RequestID], action)
+	return nil
+}
+
 func (m *ThreadSafeMockWorkflowRepo) GetMatchingPolicy(ctx context.Context, serviceName, resourceType string, amount float64) (*domain.ApprovalPolicy, error) {
-	return nil, nil
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.policy, nil
+}
+
+type mockAuthorizer struct {
+	allowedRoles map[string][]string
+}
+
+func (m *mockAuthorizer) CheckPermission(ctx context.Context, userID, serviceName, resource, action string) (bool, []string, error) {
+	roles := m.allowedRoles[userID]
+	return false, roles, nil
 }
 
 func (m *ThreadSafeMockWorkflowRepo) ListActionsByRequestID(ctx context.Context, requestID string) ([]domain.ApprovalAction, error) {
@@ -179,6 +228,35 @@ func TestFailureAndConcurrencyMatrix(t *testing.T) {
 		_, err = svc.Approve(ctx, req.ID, "manager_1", "OK again")
 		if !errors.Is(err, domain.ErrRequestAlreadyDecided) {
 			t.Errorf("expected ErrRequestAlreadyDecided on duplicate approval, got: %v", err)
+		}
+	})
+
+	t.Run("Matrix #4b: Multi-level four-eyes principle forbids same manager approving twice", func(t *testing.T) {
+		repo := newThreadSafeMockWorkflowRepo()
+		svc := service.New(repo)
+
+		// 2-level bill
+		req, _ := svc.Submit(ctx, "purchasing", "bill_foureyed_1", "purchaser_1", 80000)
+
+		// Manager Alice approves Level 1
+		_, err := svc.Approve(ctx, req.ID, "manager_alice", "L1 approval")
+		if err != nil {
+			t.Fatalf("first approval failed: %v", err)
+		}
+
+		// Manager Alice attempts to also approve Level 2
+		_, err = svc.Approve(ctx, req.ID, "manager_alice", "L2 attempt by same manager")
+		if !errors.Is(err, domain.ErrDuplicateApproval) {
+			t.Fatalf("expected ErrDuplicateApproval for duplicate manager approval, got: %v", err)
+		}
+
+		// Distinct Manager Bob approves Level 2 successfully
+		l2, err := svc.Approve(ctx, req.ID, "manager_bob", "L2 approval by distinct manager")
+		if err != nil {
+			t.Fatalf("second manager approval failed: %v", err)
+		}
+		if l2.Status != domain.StatusApproved {
+			t.Errorf("expected approved status, got %s", l2.Status)
 		}
 	})
 
@@ -271,6 +349,132 @@ func TestFailureAndConcurrencyMatrix(t *testing.T) {
 		}
 		if appr.Status != domain.StatusApproved {
 			t.Errorf("expected approved after recovery, got %s", appr.Status)
+		}
+	})
+
+	// -------------------------------------------------------------------------
+	// 7. Transaction Rollback Atomicity
+	// -------------------------------------------------------------------------
+	t.Run("Matrix #7: Transaction rollback on audit insertion failure leaves request unmodified", func(t *testing.T) {
+		repo := newThreadSafeMockWorkflowRepo()
+		svc := service.New(repo)
+
+		req, err := svc.Submit(ctx, "purchasing", "bill_rollback_1", "purchaser_1", 20000)
+		if err != nil {
+			t.Fatalf("submit failed: %v", err)
+		}
+
+		// Configure repository to fail during action insertion (simulating database constraint or trigger abort)
+		repo.mu.Lock()
+		repo.failOnAction = true
+		repo.mu.Unlock()
+
+		_, err = svc.Approve(ctx, req.ID, "manager_1", "attempted approval")
+		if err == nil {
+			t.Fatal("expected approval to fail when audit insertion fails")
+		}
+
+		// Verify state was rolled back: status must remain pending and current_level 0
+		afterReq, _ := repo.GetRequestByID(ctx, req.ID)
+		if afterReq.Status != domain.StatusPending || afterReq.CurrentLevel != 0 {
+			t.Errorf("state corrupted after failed action: status=%s, level=%d (expected rollback to pending/0)",
+				afterReq.Status, afterReq.CurrentLevel)
+		}
+
+		// Verify no orphaned audit actions were recorded
+		actions, _ := repo.ListActionsByRequestID(ctx, req.ID)
+		if len(actions) != 0 {
+			t.Errorf("expected 0 recorded actions after rollback, got %d", len(actions))
+		}
+	})
+
+	// -------------------------------------------------------------------------
+	// Priority 1.3: Policy Role Authorization Enforcement
+	// -------------------------------------------------------------------------
+	t.Run("Priority 1.3: Approval policy role authorization", func(t *testing.T) {
+		repo := newThreadSafeMockWorkflowRepo()
+		auth := &mockAuthorizer{
+			allowedRoles: map[string][]string{
+				"director_dan": {"finance_director"},
+				"regular_clerk": {"inventory_clerk"},
+			},
+		}
+		svc := service.New(repo, auth)
+
+		// Create policy requiring finance_director role
+		repo.mu.Lock()
+		repo.requests["custom_pol_req"] = domain.ApprovalRequest{
+			ID:             "custom_pol_req",
+			Service:        "finance",
+			ResourceID:     "capex_01",
+			Amount:         100000,
+			RequesterID:    "purchaser_1",
+			Status:         domain.StatusPending,
+			CurrentLevel:   0,
+			RequiredLevels: 1,
+			CreatedAt:      time.Now().UTC(),
+			UpdatedAt:      time.Now().UTC(),
+		}
+		repo.mu.Unlock()
+
+		// Attempt approval by regular clerk lacking required role
+		// We set custom policy in mock
+		// If policy requires "finance_director", regular clerk fails with ErrInsufficientRole
+		policy := &domain.ApprovalPolicy{
+			Service:        "finance",
+			ResourceType:   "bill",
+			RequiredRole:   "finance_director",
+			RequiredLevels: 1,
+		}
+		repo.policy = policy
+
+		_, err := svc.Approve(ctx, "custom_pol_req", "regular_clerk", "unauthorized approval")
+		if !errors.Is(err, domain.ErrInsufficientRole) {
+			t.Errorf("expected ErrInsufficientRole, got: %v", err)
+		}
+
+		// Director Dan with required role succeeds
+		appr, err := svc.Approve(ctx, "custom_pol_req", "director_dan", "authorized approval")
+		if err != nil {
+			t.Fatalf("expected director approval to succeed, got: %v", err)
+		}
+		if appr.Status != domain.StatusApproved {
+			t.Errorf("expected approved status, got %s", appr.Status)
+		}
+	})
+
+	// -------------------------------------------------------------------------
+	// Priority 2.3: Duplicate Submission & Resubmission Rules
+	// -------------------------------------------------------------------------
+	t.Run("Priority 2.3: Duplicate submission blocked while active, resubmission permitted if rejected", func(t *testing.T) {
+		repo := newThreadSafeMockWorkflowRepo()
+		svc := service.New(repo)
+
+		// Initial submission
+		req1, err := svc.Submit(ctx, "purchasing", "bill_resub_1", "purchaser_1", 10000)
+		if err != nil {
+			t.Fatalf("first submit failed: %v", err)
+		}
+
+		// Duplicate submission while pending is forbidden
+		_, err = svc.Submit(ctx, "purchasing", "bill_resub_1", "purchaser_1", 10000)
+		if !errors.Is(err, domain.ErrDuplicateSubmission) {
+			t.Errorf("expected ErrDuplicateSubmission, got: %v", err)
+		}
+
+		// Reject the request
+		_, err = svc.Reject(ctx, req1.ID, "manager_1", "budget invalid")
+		if err != nil {
+			t.Fatalf("reject failed: %v", err)
+		}
+
+		// Resubmission of rejected bill is now allowed
+		req2, err := svc.Submit(ctx, "purchasing", "bill_resub_1", "purchaser_1", 12000)
+		if err != nil {
+			t.Fatalf("resubmission of rejected bill should succeed, got: %v", err)
+		}
+		if req2.ID == req1.ID {
+			t.Errorf("resubmitted request should have a new ID, got duplicate %s", req2.ID)
 		}
 	})
 

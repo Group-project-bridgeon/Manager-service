@@ -38,6 +38,12 @@ var (
 	ErrInvalidResourceID = errors.New("resource id cannot be empty")
 	// ErrInvalidRequesterID indicates the requester identifier is missing.
 	ErrInvalidRequesterID = errors.New("requester id cannot be empty")
+	// ErrDuplicateApproval indicates the actor has already approved a previous level of this request.
+	ErrDuplicateApproval = errors.New("actor has already approved a previous level for this request")
+	// ErrDuplicateSubmission indicates an active approval request already exists for this resource.
+	ErrDuplicateSubmission = errors.New("an active approval request already exists for this resource")
+	// ErrConcurrentUpdate indicates that a concurrent transaction modified the request before this decision was committed.
+	ErrConcurrentUpdate = errors.New("request was modified concurrently by another transaction")
 )
 
 // ApprovalPolicy defines threshold rules for when approvals are required.

@@ -62,9 +62,9 @@ func run() error {
 	userRoleRepo := rbacRepo.NewPostgresUserRoleRepository(dbPool)
 	roleSvc := rbacService.New(roleRepo, userRoleRepo)
 
-	// 5. Wire Workflow business module: repository -> service
+	// 5. Wire Workflow business module: repository -> service (using userRoleRepo as policy authorizer)
 	wfRepo := workflowRepo.NewPostgresWorkflowRepository(dbPool)
-	wfSvc := workflowService.New(wfRepo)
+	wfSvc := workflowService.New(wfRepo, userRoleRepo)
 
 	// 6. Initialize JWT token verifier
 	authVerifier := auth.NewVerifier(cfg.JWTPublicKey, cfg.JWTIssuer, cfg.JWTAudience)

@@ -1,4 +1,4 @@
-.PHONY: help run build test lint tidy clean
+.PHONY: help run build test lint tidy clean migrate-up migrate-down migrate-status
 
 # Default binary output
 BINARY_NAME=server
@@ -25,3 +25,12 @@ tidy: ## Clean up unused Go module dependencies
 
 clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR) coverage.out
+
+migrate-up: ## Apply all pending database migrations
+	go run ./cmd/migrate up
+
+migrate-down: ## Rollback the most recent database migration
+	go run ./cmd/migrate down
+
+migrate-status: ## Check the status of database migrations
+	go run ./cmd/migrate status

@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -21,6 +22,18 @@ type Config struct {
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
 	ShutdownTimeout time.Duration
+
+	// Database Configuration
+	DBHost            string
+	DBPort            int
+	DBUser            string
+	DBPassword        string
+	DBName            string
+	DBSSLMode         string
+	DBMaxConns        int32
+	DBMinConns        int32
+	DBMaxConnLifetime time.Duration
+	DBMaxConnIdleTime time.Duration
 }
 
 // Load reads configuration from the environment and an optional .env file,
@@ -30,12 +43,21 @@ func Load() (*Config, error) {
 	_ = loadDotEnv(".env")
 
 	cfg := &Config{
-		AppEnv:          getEnv("APP_ENV", "development"),
-		LogLevel:        strings.ToLower(getEnv("LOG_LEVEL", "info")),
-		ReadTimeout:     getDurationEnv("READ_TIMEOUT", 5*time.Second),
-		WriteTimeout:    getDurationEnv("WRITE_TIMEOUT", 10*time.Second),
-		IdleTimeout:     getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
-		ShutdownTimeout: getDurationEnv("SHUTDOWN_TIMEOUT", 5*time.Second),
+		AppEnv:            getEnv("APP_ENV", "development"),
+		LogLevel:          strings.ToLower(getEnv("LOG_LEVEL", "info")),
+		ReadTimeout:       getDurationEnv("READ_TIMEOUT", 5*time.Second),
+		WriteTimeout:      getDurationEnv("WRITE_TIMEOUT", 10*time.Second),
+		IdleTimeout:       getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
+		ShutdownTimeout:   getDurationEnv("SHUTDOWN_TIMEOUT", 5*time.Second),
+		DBHost:            getEnv("DB_HOST", "localhost"),
+		DBUser:            getEnv("DB_USER", "postgres"),
+		DBPassword:        getEnv("DB_PASSWORD", ""),
+		DBName:            getEnv("DB_NAME", "erp_manager"),
+		DBSSLMode:         getEnv("DB_SSLMODE", "disable"),
+		DBMaxConns:        getInt32Env("DB_MAX_CONNS", 25),
+		DBMinConns:        getInt32Env("DB_MIN_CONNS", 5),
+		DBMaxConnLifetime: getDurationEnv("DB_MAX_CONN_LIFETIME", 1*time.Hour),
+		DBMaxConnIdleTime: getDurationEnv("DB_MAX_CONN_IDLE_TIME", 30*time.Minute),
 	}
 
 	portStr := getEnv("PORT", "8080")
@@ -45,11 +67,36 @@ func Load() (*Config, error) {
 	}
 	cfg.Port = port
 
+	dbPortStr := getEnv("DB_PORT", "5432")
+	dbPort, err := strconv.Atoi(dbPortStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid DB_PORT %q: must be an integer", dbPortStr)
+	}
+	cfg.DBPort = dbPort
+
 	if err := cfg.validate(); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
 	}
 
 	return cfg, nil
+}
+
+// DSN returns the formatted PostgreSQL connection URL.
+func (c *Config) DSN() string {
+	userInfo := url.User(c.DBUser)
+	if c.DBPassword != "" {
+		userInfo = url.UserPassword(c.DBUser, c.DBPassword)
+	}
+
+	u := url.URL{
+		Scheme:   "postgres",
+		User:     userInfo,
+		Host:     fmt.Sprintf("%s:%d", c.DBHost, c.DBPort),
+		Path:     c.DBName,
+		RawQuery: fmt.Sprintf("sslmode=%s", c.DBSSLMode),
+	}
+
+	return u.String()
 }
 
 func (c *Config) validate() error {
@@ -69,10 +116,36 @@ func (c *Config) validate() error {
 		return fmt.Errorf("invalid LOG_LEVEL %q: must be one of [debug, info, warn, error]", c.LogLevel)
 	}
 
-	// Docker default stop timeout is 10s. If our shutdown timeout is >= 10s,
-	// Docker will send SIGKILL before our graceful cleanup completes.
 	if c.ShutdownTimeout >= 10*time.Second {
 		return errors.New("SHUTDOWN_TIMEOUT must be less than 10s to allow graceful exit before Docker SIGKILL")
+	}
+
+	// Database validations
+	if strings.TrimSpace(c.DBHost) == "" {
+		return errors.New("DB_HOST cannot be empty")
+	}
+	if c.DBPort < 1 || c.DBPort > 65535 {
+		return fmt.Errorf("invalid DB_PORT %d: must be between 1 and 65535", c.DBPort)
+	}
+	if strings.TrimSpace(c.DBUser) == "" {
+		return errors.New("DB_USER cannot be empty")
+	}
+	if strings.TrimSpace(c.DBName) == "" {
+		return errors.New("DB_NAME cannot be empty")
+	}
+	switch c.DBSSLMode {
+	case "disable", "require", "verify-ca", "verify-full":
+	default:
+		return fmt.Errorf("invalid DB_SSLMODE %q: must be one of [disable, require, verify-ca, verify-full]", c.DBSSLMode)
+	}
+	if c.DBMinConns < 0 {
+		return errors.New("DB_MIN_CONNS cannot be negative")
+	}
+	if c.DBMaxConns <= 0 {
+		return errors.New("DB_MAX_CONNS must be greater than 0")
+	}
+	if c.DBMinConns > c.DBMaxConns {
+		return fmt.Errorf("DB_MIN_CONNS (%d) cannot be greater than DB_MAX_CONNS (%d)", c.DBMinConns, c.DBMaxConns)
 	}
 
 	return nil
@@ -83,6 +156,18 @@ func getEnv(key, fallback string) string {
 		return strings.TrimSpace(val)
 	}
 	return fallback
+}
+
+func getInt32Env(key string, fallback int32) int32 {
+	valStr := getEnv(key, "")
+	if valStr == "" {
+		return fallback
+	}
+	v, err := strconv.ParseInt(valStr, 10, 32)
+	if err != nil {
+		return fallback
+	}
+	return int32(v)
 }
 
 func getDurationEnv(key string, fallback time.Duration) time.Duration {
@@ -98,7 +183,6 @@ func getDurationEnv(key string, fallback time.Duration) time.Duration {
 }
 
 // loadDotEnv parses a simple KEY=VALUE file into the process environment.
-// It will not overwrite existing environment variables.
 func loadDotEnv(filepath string) error {
 	file, err := os.Open(filepath)
 	if err != nil {
@@ -120,7 +204,6 @@ func loadDotEnv(filepath string) error {
 		}
 		key := strings.TrimSpace(parts[0])
 		val := strings.TrimSpace(parts[1])
-		// Preserve environment variables already explicitly set
 		if _, exists := os.LookupEnv(key); !exists {
 			_ = os.Setenv(key, val)
 		}

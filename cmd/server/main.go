@@ -10,9 +10,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/group-project-bridgeon/manager-service/internal/api"
 	"github.com/group-project-bridgeon/manager-service/internal/config"
+	"github.com/group-project-bridgeon/manager-service/internal/database"
 	"github.com/group-project-bridgeon/manager-service/internal/logger"
 	"github.com/group-project-bridgeon/manager-service/internal/server"
 )
@@ -39,17 +41,27 @@ func run() error {
 		slog.String("log_level", cfg.LogLevel),
 	)
 
-	// 3. Assemble API router
+	// 3. Initialize PostgreSQL connection pool
+	dbCtx, dbCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dbCancel()
+
+	dbPool, err := database.NewPool(dbCtx, cfg, log)
+	if err != nil {
+		return fmt.Errorf("connecting to database: %w", err)
+	}
+	defer dbPool.Close()
+
+	// 4. Assemble API router with database readiness checker
 	router := api.NewRouter(api.RouterConfig{
 		AppEnv:  cfg.AppEnv,
 		Logger:  log,
-		Checker: nil, // Phase 2: Wire Postgres health checker here
+		Checker: database.NewHealthChecker(dbPool),
 	})
 
-	// 4. Wrap in production HTTP server
+	// 5. Wrap in production HTTP server
 	srv := server.New(cfg, router)
 
-	// 5. Channel to catch server runtime errors
+	// 6. Channel to catch server runtime errors
 	serverErr := make(chan error, 1)
 	go func() {
 		log.Info("server listening", slog.Int("port", srv.Port()))
@@ -58,7 +70,7 @@ func run() error {
 		}
 	}()
 
-	// 6. Trap OS termination signals (SIGINT, SIGTERM)
+	// 7. Trap OS termination signals (SIGINT, SIGTERM)
 	shutdownSig := make(chan os.Signal, 1)
 	signal.Notify(shutdownSig, os.Interrupt, syscall.SIGTERM)
 
@@ -69,7 +81,7 @@ func run() error {
 		log.Info("shutdown signal received", slog.String("signal", sig.String()))
 	}
 
-	// 7. Initiate graceful shutdown with configured deadline
+	// 8. Initiate graceful shutdown with configured deadline
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 

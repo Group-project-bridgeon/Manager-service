@@ -16,6 +16,8 @@ import (
 	"github.com/group-project-bridgeon/manager-service/internal/config"
 	"github.com/group-project-bridgeon/manager-service/internal/database"
 	"github.com/group-project-bridgeon/manager-service/internal/logger"
+	"github.com/group-project-bridgeon/manager-service/internal/rbac/repository"
+	"github.com/group-project-bridgeon/manager-service/internal/rbac/service"
 	"github.com/group-project-bridgeon/manager-service/internal/server"
 )
 
@@ -51,17 +53,22 @@ func run() error {
 	}
 	defer dbPool.Close()
 
-	// 4. Assemble API router with database readiness checker
+	// 4. Wire RBAC business module: repository -> service
+	roleRepo := repository.NewPostgresRoleRepository(dbPool)
+	roleService := service.New(roleRepo)
+
+	// 5. Assemble API router with dependencies
 	router := api.NewRouter(api.RouterConfig{
-		AppEnv:  cfg.AppEnv,
-		Logger:  log,
-		Checker: database.NewHealthChecker(dbPool),
+		AppEnv:      cfg.AppEnv,
+		Logger:      log,
+		Checker:     database.NewHealthChecker(dbPool),
+		RoleService: roleService,
 	})
 
-	// 5. Wrap in production HTTP server
+	// 6. Wrap in production HTTP server
 	srv := server.New(cfg, router)
 
-	// 6. Channel to catch server runtime errors
+	// 7. Channel to catch server runtime errors
 	serverErr := make(chan error, 1)
 	go func() {
 		log.Info("server listening", slog.Int("port", srv.Port()))
@@ -70,7 +77,7 @@ func run() error {
 		}
 	}()
 
-	// 7. Trap OS termination signals (SIGINT, SIGTERM)
+	// 8. Trap OS termination signals (SIGINT, SIGTERM)
 	shutdownSig := make(chan os.Signal, 1)
 	signal.Notify(shutdownSig, os.Interrupt, syscall.SIGTERM)
 
@@ -81,7 +88,7 @@ func run() error {
 		log.Info("shutdown signal received", slog.String("signal", sig.String()))
 	}
 
-	// 8. Initiate graceful shutdown with configured deadline
+	// 9. Initiate graceful shutdown with configured deadline
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 

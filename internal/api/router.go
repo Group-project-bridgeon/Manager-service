@@ -4,13 +4,16 @@ import (
 	"log/slog"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/group-project-bridgeon/manager-service/internal/rbac/service"
 )
 
 // RouterConfig contains dependencies required to construct the HTTP router.
 type RouterConfig struct {
-	AppEnv  string
-	Logger  *slog.Logger
-	Checker ReadinessChecker
+	AppEnv      string
+	Logger      *slog.Logger
+	Checker     ReadinessChecker
+	RoleService *service.Service
 }
 
 // NewRouter configures and returns the Gin engine with all routes and middlewares mounted.
@@ -37,10 +40,15 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	// Business API routes (v1)
 	v1 := r.Group("/api/v1")
 	{
-		// Future business modules will be registered here, e.g.:
-		// partyHandler.RegisterRoutes(v1.Group("/parties"))
-		// authHandler.RegisterRoutes(v1.Group("/auth"))
-		_ = v1
+		if cfg.RoleService != nil {
+			roleHandler := NewRoleHandler(cfg.RoleService)
+			roles := v1.Group("/roles")
+			{
+				roles.GET("", roleHandler.List)
+				roles.GET("/:id", roleHandler.GetByID)
+				roles.POST("", roleHandler.Create)
+			}
+		}
 	}
 
 	return r

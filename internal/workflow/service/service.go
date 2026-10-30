@@ -22,22 +22,15 @@ type WorkflowRepository interface {
 	ListActionsByRequestID(ctx context.Context, requestID string) ([]domain.ApprovalAction, error)
 }
 
-// Authorizer checks whether an actor has permission to approve requests.
-type Authorizer interface {
-	CheckPermission(ctx context.Context, userID, serviceName, resource, action string) (bool, []string, error)
-}
-
 // Service coordinates approval workflows.
 type Service struct {
-	repo       WorkflowRepository
-	authorizer Authorizer
+	repo WorkflowRepository
 }
 
 // New constructs an approval workflow Service.
-func New(repo WorkflowRepository, authorizer Authorizer) *Service {
+func New(repo WorkflowRepository) *Service {
 	return &Service{
-		repo:       repo,
-		authorizer: authorizer,
+		repo: repo,
 	}
 }
 
@@ -110,17 +103,6 @@ func (s *Service) Approve(ctx context.Context, requestID, actorID, notes string)
 	// Check self-approval and lifecycle constraints
 	if err := req.CanApprove(actorID, false); err != nil {
 		return nil, err
-	}
-
-	// Verify actor authority via Authorizer
-	if s.authorizer != nil {
-		allowed, roles, err := s.authorizer.CheckPermission(ctx, actorID, req.Service, "bill", "approve")
-		if err != nil {
-			return nil, fmt.Errorf("verifying authority: %w", err)
-		}
-		if !allowed && !hasManagerOrAdmin(roles) {
-			return nil, domain.ErrInsufficientRole
-		}
 	}
 
 	req.CurrentLevel++
@@ -203,15 +185,6 @@ func (s *Service) GetHistory(ctx context.Context, requestID string) (*domain.App
 	}
 
 	return req, actions, nil
-}
-
-func hasManagerOrAdmin(roles []string) bool {
-	for _, r := range roles {
-		if r == "manager" || r == "admin" {
-			return true
-		}
-	}
-	return false
 }
 
 func newUUID() string {

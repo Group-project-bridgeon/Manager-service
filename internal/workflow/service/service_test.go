@@ -61,28 +61,10 @@ func (m *mockWorkflowRepo) ListActionsByRequestID(ctx context.Context, requestID
 	return m.actions[requestID], nil
 }
 
-type mockAuthorizer struct {
-	allowedRoles map[string][]string
-}
-
-func (m *mockAuthorizer) CheckPermission(ctx context.Context, userID, serviceName, resource, action string) (bool, []string, error) {
-	roles := m.allowedRoles[userID]
-	for _, r := range roles {
-		if r == "manager" || r == "admin" {
-			return true, roles, nil
-		}
-	}
-	return false, roles, nil
-}
-
 func TestWorkflowThresholds(t *testing.T) {
 	ctx := context.Background()
 	repo := newMockWorkflowRepo()
-	auth := &mockAuthorizer{allowedRoles: map[string][]string{
-		"mgr_1": {"manager"},
-		"mgr_2": {"manager"},
-	}}
-	svc := service.New(repo, auth)
+	svc := service.New(repo)
 
 	t.Run("under 50k requires 1 level", func(t *testing.T) {
 		req, err := svc.Submit(ctx, "purchasing", "bill_01", "purchaser_bob", 25000.00)

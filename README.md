@@ -1,41 +1,136 @@
-# Manager-service
-decides what each user or role may do in each service, and approves things such as purchase bills before they proceed.
-now this is my new service to the erp platform  which is manager service this servie manages all the erp platform 
-2. Roles and permissions list
+# Manager Service
 
-A table of role → permissions for the first version, for example:
+Manager-service is the centralized governance, authorization, and workflow approval engine for the ERP platform. It manages role-based access control (RBAC), enforces multi-level approval hierarchies for organizational resources (such as purchasing bills), and guarantees an immutable audit trail.
 
-Role	Can do
-admin	everything, including managing roles
-manager	approve bills, view all services
-purchaser	create bills, view catalog and parties
-inventory_clerk	adjust and receive stock
-accountant	view approved bills, create payables
+---
 
-What approval thresholds apply? For example, under ₹50,000 needs one manager, and above that needs two levels.
-Can anyone with the manager role approve, or only certain managers?
-Can the requester approve their own bill? My default is no.
-Can a rejected bill be resubmitted, or does it need a new bill?
-Does a pending request expire?
+## 1. System Architecture & Core Invariants
 
-Also define the bill status lifecycle, which Purchasing must follow: draft → pending_approval → approved | rejected, and then what happens after approved (paid, received).
+### 1.1 Authentication & Principal Extraction
+- **Token Contract**: Manager-service validates RS256 JWTs issued exclusively by the Authentication service.
+- **Single Source of Identity**: Identity is extracted solely from the cryptographically verified JWT claims (`user_id` and `sub`). Request bodies **never** supply identity fields (`requester_id`, `actor_id`, and `assigned_by` are stripped from DTOs and ignored if submitted).
+- **Exact Global Permissions**: Authorization is enforced at the HTTP gateway via Gin middleware (`RequirePermission`) with exact string matching. No wildcard or prefix grants are allowed.
+- **Key Rotation**: Supports zero-downtime key rotation via a multi-key KeyRing. Multiple RSA public keys can be supplied as concatenated PEM blocks or comma-delimited paths in `JWT_PUBLIC_KEY_PATH`.
+- **Known Limitation**: `token_version` cannot be validated without an out-of-band synchronous call to the Authentication service; a revoked token remains valid until its 15-minute expiration timestamp (`exp`).
 
-## Authentication & Authorization
+### 1.2 Concurrency, Transactions & Atomicity
+- **Transactional State Transitions (`pgx.Tx`)**: Workflow state changes and audit action recordings are executed within a single database transaction via `ApplyDecisionTx`.
+- **Optimistic Concurrency Control (OCC)**: State transitions conditionally match `WHERE id = $id AND current_level = $expectedLevel AND status = $expectedStatus`. If a concurrent approver acts simultaneously, exactly one transaction commits; all competing transactions receive `409 CONCURRENT_UPDATE` and roll back cleanly.
+- **Four-Eyes Principle**: A manager who approved a prior level of a multi-level request cannot approve subsequent levels (`409 DUPLICATE_APPROVAL`).
+- **Self-Approval Prohibition**: The creator/requester of a resource cannot approve their own submission unless an explicit policy with `allow_self_approval = true` matches (`403 SELF_APPROVAL_FORBIDDEN`).
+- **Duplicate Submission Prevention**: A database partial unique index on `(service, resource_id) WHERE status IN ('pending', 'approved')` prevents duplicate concurrent submissions. If a previous request is rejected or expired, resubmission is permitted.
+- **Immutable Audit Trail**: PostgreSQL trigger `trg_prevent_approval_actions_mutation` raises an exception on any `UPDATE` or `DELETE` against `approval_actions`.
 
-Manager-service authenticates incoming requests using RS256 JSON Web Tokens (JWT) issued by the Authentication service. The verified JWT is the single source of truth for caller identity and permissions.
+---
 
-### Environment Configuration
+## 2. API Contract & Permissions Matrix
 
-| Variable | Description | Default | Required |
-| --- | --- | --- | --- |
-| `JWT_PUBLIC_KEY_PATH` | Path to RSA public key PEM file (min 2048 bits) | - | **Yes** |
-| `JWT_ISSUER` | Expected JWT issuer claim (`iss`) | `erp-auth` | No |
-| `JWT_AUDIENCE` | Expected JWT audience claim (`aud`) | `erp-api` | No |
+### 2.1 Standard Envelopes
+All responses adhere to the standard envelope format:
 
-### Security Model
-- **Algorithm**: RS256 only. All symmetric algorithms (e.g., HS256) and "none" are rejected.
-- **Key Requirement**: RSA public key >= 2048 bits loaded from PEM file. Private keys are never mounted or accessed by Manager service.
-- **Token Verification**: Signature, `exp`, `iat`, `nbf`, `iss`, and `aud` are strictly validated with 0s clock leeway. Token lifetime (`exp - iat`) must not exceed 15 minutes.
-- **Caller Identity**: Extracted strictly from JWT `user_id` (and matching `sub`). Identity fields in request bodies (`requester_id`, `actor_id`) are not accepted.
-- **Route Authorization**: Route-level permissions matching exact global grants (`manager.approvals:submit`, `manager.approvals:read`, `manager.approvals:approve`, `manager.approvals:reject`, `manager.rbac:manage`, `manager.authz:check`).
-- **Known Limitation**: `token_version` is embedded in the token but not checked against an external revocation cache; revoked tokens remain valid until their maximum 15-minute expiration.
+**Success Response (2xx):**
+```json
+{
+  "data": { ... },
+  "request_id": "0192e2b3-8c45-789a-bcde-f0123456789a"
+}
+```
+
+**Error Response (4xx / 5xx):**
+```json
+{
+  "error": {
+    "code": "PERMISSION_DENIED",
+    "message": "lacking required permission: manager.approvals:approve"
+  },
+  "request_id": "0192e2b3-8c45-789a-bcde-f0123456789a"
+}
+```
+
+### 2.2 Endpoints and Permission Matrix
+
+| Method | Endpoint | Required Permission | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/healthz` | *Public* | Liveness probe (returns 200 OK) |
+| `GET` | `/readyz` | *Public* | Readiness probe (verifies DB ping connectivity; returns 503 on outage) |
+| `POST` | `/api/v1/approvals/submit` | `manager.approvals:submit` | Submits a resource for approval workflow |
+| `GET` | `/api/v1/approvals/status` | `manager.approvals:read` | Queries the current approval status for a resource |
+| `GET` | `/api/v1/approvals/:id` | `manager.approvals:read` | Returns the full approval request and its audit history |
+| `POST` | `/api/v1/approvals/:id/approve` | `manager.approvals:approve` | Records an approval decision for the current level |
+| `POST` | `/api/v1/approvals/:id/reject` | `manager.approvals:reject` | Rejects the approval request |
+| `GET` | `/api/v1/roles` | `manager.rbac:manage` | Lists all defined system roles |
+| `GET` | `/api/v1/roles/:id` | `manager.rbac:manage` | Retrieves role details and assigned permissions |
+| `POST` | `/api/v1/roles` | `manager.rbac:manage` | Creates a new role |
+| `POST` | `/api/v1/users/:id/roles` | `manager.rbac:manage` | Assigns a role to a user (`assigned_by` derived from JWT) |
+| `GET` | `/api/v1/users/:id/roles` | `manager.rbac:manage` | Lists roles assigned to a user |
+| `DELETE`| `/api/v1/users/:id/roles/:role_id` | `manager.rbac:manage` | Revokes a role assignment from a user |
+| `POST` | `/api/v1/authz/check` | `manager.authz:check` | Checks whether a user possesses authority for an action |
+
+### 2.3 Required Migration for Authentication Service
+The Authentication service database must seed the following permissions into its catalog:
+```sql
+INSERT INTO permissions (id, service, resource, action, description) VALUES
+    ('manager.approvals:submit', 'manager', 'approvals', 'submit', 'Submit resource for manager approval'),
+    ('manager.approvals:read', 'manager', 'approvals', 'read', 'View approval request status and history'),
+    ('manager.approvals:approve', 'manager', 'approvals', 'approve', 'Approve pending workflow level'),
+    ('manager.approvals:reject', 'manager', 'approvals', 'reject', 'Reject pending workflow'),
+    ('manager.rbac:manage', 'manager', 'rbac', 'manage', 'Create roles and assign/revoke user roles'),
+    ('manager.authz:check', 'manager', 'authz', 'check', 'Evaluate role permissions via authz check')
+ON CONFLICT (id) DO NOTHING;
+```
+
+---
+
+## 3. Configuration Reference
+
+Configuration is strictly validated at application startup:
+
+| Variable | Description | Default | Validation Rules |
+| :--- | :--- | :--- | :--- |
+| `APP_ENV` | Application environment | `development` | Must be `development`, `staging`, or `production` |
+| `PORT` | HTTP server listening port | `8080` | Integer between 1 and 65535 |
+| `LOG_LEVEL` | Slog minimum logging level | `info` | Must be `debug`, `info`, `warn`, or `error` |
+| `READ_TIMEOUT` | HTTP server read timeout | `5s` | Must be positive duration |
+| `WRITE_TIMEOUT` | HTTP server write timeout | `10s` | Must be positive duration |
+| `IDLE_TIMEOUT` | HTTP server idle timeout | `120s` | Must be positive duration |
+| `SHUTDOWN_TIMEOUT` | Graceful shutdown timeout | `5s` | Must be positive and `< 10s` |
+| `DB_HOST` | PostgreSQL hostname | `localhost` | Non-empty string |
+| `DB_PORT` | PostgreSQL port | `5432` | Integer between 1 and 65535 |
+| `DB_USER` | PostgreSQL username | `postgres` | Non-empty string |
+| `DB_PASSWORD` | PostgreSQL password | `""` | Required in `production` environment |
+| `DB_NAME` | PostgreSQL database name | `erp_manager` | Non-empty string |
+| `DB_SSLMODE` | PostgreSQL SSL connection mode | `disable` | One of `disable`, `require`, `verify-ca`, `verify-full` |
+| `DB_MAX_CONNS` | Pgx connection pool maximum size | `25` | Positive integer `>= DB_MIN_CONNS` |
+| `DB_MIN_CONNS` | Pgx connection pool minimum size | `5` | Non-negative integer |
+| `DB_MAX_CONN_LIFETIME` | Maximum connection reuse duration | `1h` | Must be positive duration |
+| `DB_MAX_CONN_IDLE_TIME` | Maximum idle connection duration | `30m` | Must be positive duration |
+| `JWT_PUBLIC_KEY_PATH` | Path(s) to RSA public key PEM file(s) | *None* | Required. RSA key $\ge 2048$ bits. Supports comma-separated paths |
+| `JWT_ISSUER` | Expected JWT `iss` claim | `erp-auth` | Non-empty string |
+| `JWT_AUDIENCE` | Expected JWT `aud` claim | `erp-api` | Non-empty string |
+
+---
+
+## 4. Development & Testing
+
+### 4.1 Prerequisites
+- Go 1.22+
+- PostgreSQL 16+
+- Docker & Docker Compose
+- `golangci-lint`
+
+### 4.2 Makefile Commands
+```bash
+make test             # Run all unit and integration tests with -race
+make lint             # Run golangci-lint
+make build            # Compile statically linked binary into bin/server
+make migrate-up       # Run pending Goose database migrations
+make migrate-down     # Roll back last Goose migration
+make migrate-status   # Display applied database migrations
+```
+
+### 4.3 Running via Docker Compose
+To start Manager-service and PostgreSQL together on the shared `erp-network`:
+```bash
+docker compose up --build -d
+```
+The server container awaits the PostgreSQL health check before starting.

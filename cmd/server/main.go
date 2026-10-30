@@ -53,9 +53,10 @@ func run() error {
 	}
 	defer dbPool.Close()
 
-	// 4. Wire RBAC business module: repository -> service
+	// 4. Wire RBAC business module: repositories -> service
 	roleRepo := repository.NewPostgresRoleRepository(dbPool)
-	roleService := service.New(roleRepo)
+	userRoleRepo := repository.NewPostgresUserRoleRepository(dbPool)
+	roleService := service.New(roleRepo, userRoleRepo)
 
 	// 5. Assemble API router with dependencies
 	router := api.NewRouter(api.RouterConfig{

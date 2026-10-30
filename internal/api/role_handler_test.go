@@ -46,11 +46,68 @@ func (m *mockRoleRepoForAPI) Create(ctx context.Context, role domain.Role) error
 	return nil
 }
 
+type mockUserRoleRepoForAPI struct {
+	userRoles map[string]map[string]domain.UserRole
+}
+
+func newMockUserRoleRepoForAPI() *mockUserRoleRepoForAPI {
+	return &mockUserRoleRepoForAPI{userRoles: make(map[string]map[string]domain.UserRole)}
+}
+
+func (m *mockUserRoleRepoForAPI) Assign(ctx context.Context, ur domain.UserRole) error {
+	if _, ok := m.userRoles[ur.UserID]; !ok {
+		m.userRoles[ur.UserID] = make(map[string]domain.UserRole)
+	}
+	if _, exists := m.userRoles[ur.UserID][ur.RoleID]; exists {
+		return domain.ErrUserRoleAlreadyAssigned
+	}
+	m.userRoles[ur.UserID][ur.RoleID] = ur
+	return nil
+}
+
+func (m *mockUserRoleRepoForAPI) Revoke(ctx context.Context, userID, roleID string) error {
+	if roles, ok := m.userRoles[userID]; ok {
+		if _, exists := roles[roleID]; exists {
+			delete(roles, roleID)
+			return nil
+		}
+	}
+	return domain.ErrUserRoleNotFound
+}
+
+func (m *mockUserRoleRepoForAPI) GetRolesByUserID(ctx context.Context, userID string) ([]domain.Role, error) {
+	rolesMap, ok := m.userRoles[userID]
+	if !ok {
+		return []domain.Role{}, nil
+	}
+	result := make([]domain.Role, 0, len(rolesMap))
+	for roleID := range rolesMap {
+		result = append(result, domain.Role{ID: roleID, Name: roleID})
+	}
+	return result, nil
+}
+
+func (m *mockUserRoleRepoForAPI) CheckPermission(ctx context.Context, userID, serviceName, resource, action string) (bool, []string, error) {
+	rolesMap, ok := m.userRoles[userID]
+	if !ok {
+		return false, nil, nil
+	}
+	var roles []string
+	for r := range rolesMap {
+		roles = append(roles, r)
+		if r == "admin" || (r == "manager" && serviceName == "purchasing" && action == "approve") {
+			return true, roles, nil
+		}
+	}
+	return false, roles, nil
+}
+
 func setupTestRouter() (*service.Service, http.Handler) {
 	var buf bytes.Buffer
 	log := logger.New("development", "debug", &buf)
-	repo := newMockRoleRepoForAPI()
-	svc := service.New(repo)
+	roleRepo := newMockRoleRepoForAPI()
+	userRoleRepo := newMockUserRoleRepoForAPI()
+	svc := service.New(roleRepo, userRoleRepo)
 
 	r := api.NewRouter(api.RouterConfig{
 		AppEnv:      "development",
@@ -131,4 +188,66 @@ func TestRoleEndpoints(t *testing.T) {
 	})
 
 	_ = svc
+}
+
+func TestUserRoleEndpoints(t *testing.T) {
+	svc, router := setupTestRouter()
+
+	// Seed manager role
+	_, _ = svc.CreateRole(context.Background(), "manager", "Manager", "Approver")
+
+	t.Run("assign role to user returns 201", func(t *testing.T) {
+		body := []byte(`{"role_id":"manager","assigned_by":"admin"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/users/user_99/roles", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusCreated {
+			t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+	})
+
+	t.Run("list user roles returns roles", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/users/user_99/roles", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+	})
+
+	t.Run("check authz returns true for permitted action", func(t *testing.T) {
+		body := []byte(`{"user_id":"user_99","service":"purchasing","resource":"bill","action":"approve"}`)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/authz/check", bytes.NewBuffer(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+		}
+
+		var resp api.Response
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+		dataMap := resp.Data.(map[string]any)
+		if dataMap["allowed"] != true {
+			t.Errorf("expected allowed true, got: %v", dataMap["allowed"])
+		}
+	})
+
+	t.Run("revoke role returns 200", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/users/user_99/roles/manager", nil)
+		w := httptest.NewRecorder()
+
+		router.ServeHTTP(w, req)
+
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200, got %d", w.Code)
+		}
+	})
 }

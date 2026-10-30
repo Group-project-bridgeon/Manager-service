@@ -24,7 +24,6 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 		gin.SetMode(gin.DebugMode)
 	}
 
-	// gin.New() gives us a blank engine without Gin's default console logger or recovery
 	r := gin.New()
 
 	// Attach production middlewares
@@ -42,11 +41,28 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	{
 		if cfg.RoleService != nil {
 			roleHandler := NewRoleHandler(cfg.RoleService)
+			userRoleHandler := NewUserRoleHandler(cfg.RoleService)
+
+			// Role definition endpoints
 			roles := v1.Group("/roles")
 			{
 				roles.GET("", roleHandler.List)
 				roles.GET("/:id", roleHandler.GetByID)
 				roles.POST("", roleHandler.Create)
+			}
+
+			// User role assignment endpoints
+			users := v1.Group("/users")
+			{
+				users.POST("/:id/roles", userRoleHandler.Assign)
+				users.GET("/:id/roles", userRoleHandler.ListUserRoles)
+				users.DELETE("/:id/roles/:role_id", userRoleHandler.Revoke)
+			}
+
+			// Central authorization query endpoint
+			authz := v1.Group("/authz")
+			{
+				authz.POST("/check", userRoleHandler.CheckAuthz)
 			}
 		}
 	}

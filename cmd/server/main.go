@@ -16,9 +16,11 @@ import (
 	"github.com/group-project-bridgeon/manager-service/internal/config"
 	"github.com/group-project-bridgeon/manager-service/internal/database"
 	"github.com/group-project-bridgeon/manager-service/internal/logger"
-	"github.com/group-project-bridgeon/manager-service/internal/rbac/repository"
-	"github.com/group-project-bridgeon/manager-service/internal/rbac/service"
+	rbacRepo "github.com/group-project-bridgeon/manager-service/internal/rbac/repository"
+	rbacService "github.com/group-project-bridgeon/manager-service/internal/rbac/service"
 	"github.com/group-project-bridgeon/manager-service/internal/server"
+	workflowRepo "github.com/group-project-bridgeon/manager-service/internal/workflow/repository"
+	workflowService "github.com/group-project-bridgeon/manager-service/internal/workflow/service"
 )
 
 func main() {
@@ -54,22 +56,27 @@ func run() error {
 	defer dbPool.Close()
 
 	// 4. Wire RBAC business module: repositories -> service
-	roleRepo := repository.NewPostgresRoleRepository(dbPool)
-	userRoleRepo := repository.NewPostgresUserRoleRepository(dbPool)
-	roleService := service.New(roleRepo, userRoleRepo)
+	roleRepo := rbacRepo.NewPostgresRoleRepository(dbPool)
+	userRoleRepo := rbacRepo.NewPostgresUserRoleRepository(dbPool)
+	roleSvc := rbacService.New(roleRepo, userRoleRepo)
 
-	// 5. Assemble API router with dependencies
+	// 5. Wire Workflow business module: repository -> service (using userRoleRepo as authorizer)
+	wfRepo := workflowRepo.NewPostgresWorkflowRepository(dbPool)
+	wfSvc := workflowService.New(wfRepo, userRoleRepo)
+
+	// 6. Assemble API router with dependencies
 	router := api.NewRouter(api.RouterConfig{
-		AppEnv:      cfg.AppEnv,
-		Logger:      log,
-		Checker:     database.NewHealthChecker(dbPool),
-		RoleService: roleService,
+		AppEnv:          cfg.AppEnv,
+		Logger:          log,
+		Checker:         database.NewHealthChecker(dbPool),
+		RoleService:     roleSvc,
+		WorkflowService: wfSvc,
 	})
 
-	// 6. Wrap in production HTTP server
+	// 7. Wrap in production HTTP server
 	srv := server.New(cfg, router)
 
-	// 7. Channel to catch server runtime errors
+	// 8. Channel to catch server runtime errors
 	serverErr := make(chan error, 1)
 	go func() {
 		log.Info("server listening", slog.Int("port", srv.Port()))
@@ -78,7 +85,7 @@ func run() error {
 		}
 	}()
 
-	// 8. Trap OS termination signals (SIGINT, SIGTERM)
+	// 9. Trap OS termination signals (SIGINT, SIGTERM)
 	shutdownSig := make(chan os.Signal, 1)
 	signal.Notify(shutdownSig, os.Interrupt, syscall.SIGTERM)
 
@@ -89,7 +96,7 @@ func run() error {
 		log.Info("shutdown signal received", slog.String("signal", sig.String()))
 	}
 
-	// 9. Initiate graceful shutdown with configured deadline
+	// 10. Initiate graceful shutdown with configured deadline
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancel()
 

@@ -104,11 +104,12 @@ func TestPostgresWorkflowRepository_ConcurrencyAndAtomicity(t *testing.T) {
 				}
 
 				err := repo.ApplyDecisionTx(ctx, decidedReq, action, 0, domain.StatusPending)
-				if err == nil {
+				switch {
+				case err == nil:
 					atomic.AddInt32(&successCount, 1)
-				} else if errors.Is(err, domain.ErrConcurrentUpdate) {
+				case errors.Is(err, domain.ErrConcurrentUpdate):
 					atomic.AddInt32(&conflictCount, 1)
-				} else {
+				default:
 					atomic.AddInt32(&otherErrCount, 1)
 				}
 			}(actorID)

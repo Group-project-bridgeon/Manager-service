@@ -43,6 +43,7 @@ type Config struct {
 	JWTIssuer        string
 	JWTAudience      string
 	JWTPublicKey     *rsa.PublicKey
+	JWTPublicKeys    []*rsa.PublicKey
 }
 
 // Load reads configuration from the environment and an optional .env file,
@@ -128,6 +129,18 @@ func (c *Config) validate() error {
 		return fmt.Errorf("invalid LOG_LEVEL %q: must be one of [debug, info, warn, error]", c.LogLevel)
 	}
 
+	if c.ReadTimeout <= 0 {
+		return errors.New("READ_TIMEOUT must be positive")
+	}
+	if c.WriteTimeout <= 0 {
+		return errors.New("WRITE_TIMEOUT must be positive")
+	}
+	if c.IdleTimeout <= 0 {
+		return errors.New("IDLE_TIMEOUT must be positive")
+	}
+	if c.ShutdownTimeout <= 0 {
+		return errors.New("SHUTDOWN_TIMEOUT must be positive")
+	}
 	if c.ShutdownTimeout >= 10*time.Second {
 		return errors.New("SHUTDOWN_TIMEOUT must be less than 10s to allow graceful exit before Docker SIGKILL")
 	}
@@ -141,6 +154,9 @@ func (c *Config) validate() error {
 	}
 	if strings.TrimSpace(c.DBUser) == "" {
 		return errors.New("DB_USER cannot be empty")
+	}
+	if c.AppEnv == "production" && strings.TrimSpace(c.DBPassword) == "" {
+		return errors.New("DB_PASSWORD cannot be empty in production")
 	}
 	if strings.TrimSpace(c.DBName) == "" {
 		return errors.New("DB_NAME cannot be empty")
@@ -159,6 +175,12 @@ func (c *Config) validate() error {
 	if c.DBMinConns > c.DBMaxConns {
 		return fmt.Errorf("DB_MIN_CONNS (%d) cannot be greater than DB_MAX_CONNS (%d)", c.DBMinConns, c.DBMaxConns)
 	}
+	if c.DBMaxConnLifetime <= 0 {
+		return errors.New("DB_MAX_CONN_LIFETIME must be positive")
+	}
+	if c.DBMaxConnIdleTime <= 0 {
+		return errors.New("DB_MAX_CONN_IDLE_TIME must be positive")
+	}
 
 	// JWT Validations
 	if strings.TrimSpace(c.JWTPublicKeyPath) == "" {
@@ -170,15 +192,30 @@ func (c *Config) validate() error {
 	if strings.TrimSpace(c.JWTAudience) == "" {
 		return errors.New("JWT_AUDIENCE cannot be empty")
 	}
-	keyBytes, err := os.ReadFile(c.JWTPublicKeyPath)
-	if err != nil {
-		return fmt.Errorf("failed to read JWT public key file from %q: %w", c.JWTPublicKeyPath, err)
+
+	paths := strings.Split(c.JWTPublicKeyPath, ",")
+	var loadedKeys []*rsa.PublicKey
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		keyBytes, err := os.ReadFile(p)
+		if err != nil {
+			return fmt.Errorf("failed to read JWT public key file from %q: %w", p, err)
+		}
+		keys, err := auth.ParseRSAPublicKeysPEM(keyBytes)
+		if err != nil {
+			return fmt.Errorf("invalid JWT public key in %q: %w", p, err)
+		}
+		loadedKeys = append(loadedKeys, keys...)
 	}
-	pubKey, err := auth.ParseRSAPublicKeyPEM(keyBytes)
-	if err != nil {
-		return fmt.Errorf("invalid JWT public key: %w", err)
+
+	if len(loadedKeys) == 0 {
+		return errors.New("no valid RSA public keys loaded")
 	}
-	c.JWTPublicKey = pubKey
+	c.JWTPublicKeys = loadedKeys
+	c.JWTPublicKey = loadedKeys[0]
 
 	return nil
 }

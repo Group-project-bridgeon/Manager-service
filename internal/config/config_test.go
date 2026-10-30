@@ -112,9 +112,15 @@ func TestConfigValidation(t *testing.T) {
 		{"invalid environment", "APP_ENV", "invalid_env", true},
 		{"invalid port", "PORT", "99999", true},
 		{"invalid log level", "LOG_LEVEL", "verbose", true},
+		{"read timeout zero or negative", "READ_TIMEOUT", "0s", true},
+		{"write timeout zero or negative", "WRITE_TIMEOUT", "-1s", true},
+		{"idle timeout zero or negative", "IDLE_TIMEOUT", "0s", true},
+		{"shutdown timeout zero or negative", "SHUTDOWN_TIMEOUT", "0s", true},
 		{"shutdown timeout too high", "SHUTDOWN_TIMEOUT", "12s", true},
 		{"invalid db port", "DB_PORT", "70000", true},
 		{"invalid ssl mode", "DB_SSLMODE", "unsupported_mode", true},
+		{"db max conn lifetime negative", "DB_MAX_CONN_LIFETIME", "-5m", true},
+		{"db max conn idle time negative", "DB_MAX_CONN_IDLE_TIME", "0s", true},
 		{"min conns greater than max conns", "DB_MIN_CONNS", "50", true},
 		{"missing jwt public key path", "JWT_PUBLIC_KEY_PATH", "", true},
 		{"non-existent jwt public key file", "JWT_PUBLIC_KEY_PATH", "/non/existent/path.pem", true},
@@ -137,4 +143,39 @@ func TestConfigValidation(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("production requires db password", func(t *testing.T) {
+		os.Clearenv()
+		_ = os.Setenv("JWT_PUBLIC_KEY_PATH", validKeyPath)
+		_ = os.Setenv("APP_ENV", "production")
+		_ = os.Setenv("DB_PASSWORD", "")
+
+		_, err := config.Load()
+		if err == nil {
+			t.Fatal("expected error for empty DB_PASSWORD in production, got nil")
+		}
+
+		_ = os.Setenv("DB_PASSWORD", "prod_secret")
+		cfg, err := config.Load()
+		if err != nil {
+			t.Fatalf("expected success with DB_PASSWORD in production, got: %v", err)
+		}
+		if cfg.DBPassword != "prod_secret" {
+			t.Errorf("expected DBPassword 'prod_secret', got %q", cfg.DBPassword)
+		}
+	})
+
+	t.Run("supports multi-key rotation via comma-separated JWT_PUBLIC_KEY_PATH", func(t *testing.T) {
+		os.Clearenv()
+		key2Path := writeTempRSAPublicKey(t, 2048)
+
+		_ = os.Setenv("JWT_PUBLIC_KEY_PATH", validKeyPath+","+key2Path)
+		cfg, err := config.Load()
+		if err != nil {
+			t.Fatalf("expected successful multi-key load, got: %v", err)
+		}
+		if len(cfg.JWTPublicKeys) != 2 {
+			t.Fatalf("expected 2 keys loaded, got %d", len(cfg.JWTPublicKeys))
+		}
+	})
 }

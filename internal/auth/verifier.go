@@ -2,9 +2,11 @@ package auth
 
 import (
 	"crypto/rsa"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -28,43 +30,105 @@ type CustomClaims struct {
 }
 
 // Verifier verifies RS256 JWT tokens issued by the Authentication service.
+// It supports multiple trusted RSA public keys (a KeyRing) to facilitate zero-downtime key rotation.
 //
 // Known limitation:
 // token_version cannot be checked against a revocation store or the Authentication service
 // in this service without making an out-of-band network call. Consequently, a revoked token
 // remains valid until its exp claim expires (maximum token lifetime is 15 minutes).
 type Verifier struct {
-	publicKey *rsa.PublicKey
-	issuer    string
-	audience  string
+	mu         sync.RWMutex
+	publicKeys []*rsa.PublicKey
+	issuer     string
+	audience   string
 }
 
-// NewVerifier creates a new Verifier with the specified RSA public key, expected issuer, and expected audience.
-func NewVerifier(publicKey *rsa.PublicKey, issuer, audience string) *Verifier {
+// NewVerifier creates a new Verifier with a primary RSA public key and any optional rotation keys.
+func NewVerifier(publicKey *rsa.PublicKey, issuer, audience string, fallbackKeys ...*rsa.PublicKey) *Verifier {
+	var keys []*rsa.PublicKey
+	if publicKey != nil {
+		keys = append(keys, publicKey)
+	}
+	for _, k := range fallbackKeys {
+		if k != nil {
+			keys = append(keys, k)
+		}
+	}
 	return &Verifier{
-		publicKey: publicKey,
-		issuer:    issuer,
-		audience:  audience,
+		publicKeys: keys,
+		issuer:     issuer,
+		audience:   audience,
 	}
 }
 
-// ParseRSAPublicKeyPEM decodes and parses an RSA public key in PEM format.
+// AddPublicKey dynamically appends a trusted RSA public key to the key ring for key rotation.
+func (v *Verifier) AddPublicKey(key *rsa.PublicKey) {
+	if key == nil {
+		return
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.publicKeys = append(v.publicKeys, key)
+}
+
+// SetPublicKeys atomically replaces all trusted RSA public keys in the key ring.
+func (v *Verifier) SetPublicKeys(keys []*rsa.PublicKey) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.publicKeys = append([]*rsa.PublicKey(nil), keys...)
+}
+
+// PublicKeys returns a snapshot of currently trusted public keys in the ring.
+func (v *Verifier) PublicKeys() []*rsa.PublicKey {
+	v.mu.RLock()
+	defer v.mu.RUnlock()
+	snapshot := make([]*rsa.PublicKey, len(v.publicKeys))
+	copy(snapshot, v.publicKeys)
+	return snapshot
+}
+
+// ParseRSAPublicKeysPEM decodes and parses one or more RSA public keys in concatenated PEM format.
+// It requires each RSA key to have a bit size of at least 2048 bits.
+func ParseRSAPublicKeysPEM(pemData []byte) ([]*rsa.PublicKey, error) {
+	var keys []*rsa.PublicKey
+	rest := pemData
+	for {
+		var block *pem.Block
+		block, rest = pem.Decode(rest)
+		if block == nil {
+			break
+		}
+		pubKey, err := jwt.ParseRSAPublicKeyFromPEM(pem.EncodeToMemory(block))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse RSA public key PEM: %w", err)
+		}
+		if pubKey.N.BitLen() < 2048 {
+			return nil, fmt.Errorf("RSA public key bit length must be at least 2048 bits, got %d", pubKey.N.BitLen())
+		}
+		keys = append(keys, pubKey)
+	}
+
+	if len(keys) == 0 {
+		return nil, errors.New("no valid RSA public keys found in PEM data")
+	}
+	return keys, nil
+}
+
+// ParseRSAPublicKeyPEM decodes and parses the first RSA public key in PEM format.
 // It requires an RSA key with a key size of at least 2048 bits.
 func ParseRSAPublicKeyPEM(pemData []byte) (*rsa.PublicKey, error) {
-	pubKey, err := jwt.ParseRSAPublicKeyFromPEM(pemData)
+	keys, err := ParseRSAPublicKeysPEM(pemData)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse RSA public key PEM: %w", err)
+		return nil, err
 	}
-	if pubKey.N.BitLen() < 2048 {
-		return nil, fmt.Errorf("RSA public key bit length must be at least 2048 bits, got %d", pubKey.N.BitLen())
-	}
-	return pubKey, nil
+	return keys[0], nil
 }
 
-// Verify validates the RS256 token string and returns the authenticated Principal.
+// Verify validates the RS256 token string against the trusted key ring and returns the Principal.
+// It tries trusted public keys until signature verification succeeds or all fail.
 // It strictly enforces:
 //   - RS256 signing algorithm only (rejects HS256, none, or any other algorithm)
-//   - Cryptographic signature against the configured RSA public key
+//   - Cryptographic signature against a trusted RSA public key in the key ring
 //   - Required claims: exp, iat, nbf, iss, aud
 //   - Expected issuer and audience matching
 //   - Token lifetime (exp - iat) not exceeding 15 minutes
@@ -73,40 +137,60 @@ func ParseRSAPublicKeyPEM(pemData []byte) (*rsa.PublicKey, error) {
 //   - Non-negative token_version
 //   - Non-nil permissions array where every entry matches "resource:action" (exactly one colon)
 func (v *Verifier) Verify(tokenString string) (*Principal, error) {
-	if tokenString == "" {
+	if strings.TrimSpace(tokenString) == "" {
+		return nil, ErrInvalidToken
+	}
+
+	v.mu.RLock()
+	keys := make([]*rsa.PublicKey, len(v.publicKeys))
+	copy(keys, v.publicKeys)
+	v.mu.RUnlock()
+
+	if len(keys) == 0 {
 		return nil, ErrInvalidToken
 	}
 
 	var claims CustomClaims
-	token, err := jwt.ParseWithClaims(
-		tokenString,
-		&claims,
-		func(t *jwt.Token) (interface{}, error) {
-			if t.Method != jwt.SigningMethodRS256 {
-				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-			}
-			return v.publicKey, nil
-		},
-		jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}),
-		jwt.WithIssuer(v.issuer),
-		jwt.WithAudience(v.audience),
-		jwt.WithExpirationRequired(),
-		jwt.WithIssuedAt(),
-		jwt.WithNotBeforeRequired(),
-		jwt.WithLeeway(0),
-	)
+	var token *jwt.Token
+	var verified bool
 
-	if err != nil {
+	for _, key := range keys {
+		var candidateClaims CustomClaims
+		parsedToken, err := jwt.ParseWithClaims(
+			tokenString,
+			&candidateClaims,
+			func(t *jwt.Token) (interface{}, error) {
+				if t.Method != jwt.SigningMethodRS256 {
+					return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+				}
+				return key, nil
+			},
+			jwt.WithValidMethods([]string{jwt.SigningMethodRS256.Alg()}),
+			jwt.WithIssuer(v.issuer),
+			jwt.WithAudience(v.audience),
+			jwt.WithExpirationRequired(),
+			jwt.WithIssuedAt(),
+			jwt.WithNotBeforeRequired(),
+			jwt.WithLeeway(0),
+		)
+
+		if err == nil && parsedToken != nil && parsedToken.Valid {
+			claims = candidateClaims
+			token = parsedToken
+			verified = true
+			break
+		}
+
+		// If token is expired, reject immediately without evaluating further rotation keys
 		if errors.Is(err, jwt.ErrTokenExpired) {
-			if claims.ExpiresAt != nil && claims.IssuedAt != nil && !claims.ExpiresAt.After(claims.IssuedAt.Time) {
+			if candidateClaims.ExpiresAt != nil && candidateClaims.IssuedAt != nil && !candidateClaims.ExpiresAt.After(candidateClaims.IssuedAt.Time) {
 				return nil, ErrInvalidToken
 			}
 			return nil, ErrExpiredToken
 		}
-		return nil, ErrInvalidToken
 	}
 
-	if token == nil || !token.Valid {
+	if !verified || token == nil || !token.Valid {
 		return nil, ErrInvalidToken
 	}
 

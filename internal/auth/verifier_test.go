@@ -383,3 +383,110 @@ func TestVerifier_Verify(t *testing.T) {
 		}
 	})
 }
+
+func TestKeyRotationAndKeyRing(t *testing.T) {
+	priv1, pub1, pem1 := generateRSAKeyPair(t, 2048)
+	priv2, pub2, pem2 := generateRSAKeyPair(t, 2048)
+	privUntrusted, _, _ := generateRSAKeyPair(t, 2048)
+
+	issuer := "erp-auth"
+	audience := "erp-api"
+	userID := uuid.New()
+
+	makeToken := func(privKey *rsa.PrivateKey) string {
+		now := time.Now().Truncate(time.Second)
+		ver := 1
+		claims := auth.CustomClaims{
+			RegisteredClaims: jwt.RegisteredClaims{
+				Issuer:    issuer,
+				Audience:  jwt.ClaimStrings{audience},
+				Subject:   userID.String(),
+				IssuedAt:  jwt.NewNumericDate(now),
+				NotBefore: jwt.NewNumericDate(now),
+				ExpiresAt: jwt.NewNumericDate(now.Add(10 * time.Minute)),
+			},
+			UserID:       userID.String(),
+			Email:        "rotation@test.com",
+			TokenVersion: &ver,
+			Permissions:  []string{"service:read", "service:write"},
+		}
+		return makeTokenWithClaims(t, privKey, claims)
+	}
+
+	t.Run("ParseRSAPublicKeysPEM parses multiple concatenated PEM blocks", func(t *testing.T) {
+		var combinedPEM []byte
+		combinedPEM = append(combinedPEM, pem1...)
+		combinedPEM = append(combinedPEM, pem2...)
+		keys, err := auth.ParseRSAPublicKeysPEM(combinedPEM)
+		if err != nil {
+			t.Fatalf("expected successful parsing of combined PEM, got error: %v", err)
+		}
+		if len(keys) != 2 {
+			t.Fatalf("expected 2 keys, got %d", len(keys))
+		}
+	})
+
+	t.Run("Verifier validates tokens signed by either key in the key ring", func(t *testing.T) {
+		v := auth.NewVerifier(pub1, issuer, audience, pub2)
+
+		tok1 := makeToken(priv1)
+		principal1, err := v.Verify(tok1)
+		if err != nil {
+			t.Fatalf("expected tok1 to verify with key 1, got error: %v", err)
+		}
+		if principal1.UserID != userID {
+			t.Errorf("expected principal userID %v, got %v", userID, principal1.UserID)
+		}
+
+		tok2 := makeToken(priv2)
+		principal2, err := v.Verify(tok2)
+		if err != nil {
+			t.Fatalf("expected tok2 to verify with rotation key 2, got error: %v", err)
+		}
+		if principal2.UserID != userID {
+			t.Errorf("expected principal userID %v, got %v", userID, principal2.UserID)
+		}
+
+		tokUntrusted := makeToken(privUntrusted)
+		_, err = v.Verify(tokUntrusted)
+		if !errors.Is(err, auth.ErrInvalidToken) {
+			t.Fatalf("expected ErrInvalidToken for untrusted key, got %v", err)
+		}
+	})
+
+	t.Run("Dynamic key addition via AddPublicKey and SetPublicKeys", func(t *testing.T) {
+		v := auth.NewVerifier(pub1, issuer, audience)
+		tok2 := makeToken(priv2)
+
+		// Before adding pub2, tok2 must fail
+		_, err := v.Verify(tok2)
+		if !errors.Is(err, auth.ErrInvalidToken) {
+			t.Fatalf("expected tok2 to fail before key added, got %v", err)
+		}
+
+		// Dynamically add key 2
+		v.AddPublicKey(pub2)
+
+		// Now tok2 must succeed
+		_, err = v.Verify(tok2)
+		if err != nil {
+			t.Fatalf("expected tok2 to verify after AddPublicKey, got %v", err)
+		}
+
+		// Replace key ring with only pub2 via SetPublicKeys
+		v.SetPublicKeys([]*rsa.PublicKey{pub2})
+
+		tok1 := makeToken(priv1)
+		// tok1 should now fail because pub1 was decommissioned
+		_, err = v.Verify(tok1)
+		if !errors.Is(err, auth.ErrInvalidToken) {
+			t.Fatalf("expected tok1 to fail after decommission, got %v", err)
+		}
+
+		// tok2 continues to succeed
+		_, err = v.Verify(tok2)
+		if err != nil {
+			t.Fatalf("expected tok2 to succeed with remaining key, got %v", err)
+		}
+	})
+}

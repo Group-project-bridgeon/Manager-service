@@ -66,8 +66,8 @@ func run() error {
 	wfRepo := workflowRepo.NewPostgresWorkflowRepository(dbPool)
 	wfSvc := workflowService.New(wfRepo, userRoleRepo)
 
-	// 6. Initialize JWT token verifier
-	authVerifier := auth.NewVerifier(cfg.JWTPublicKey, cfg.JWTIssuer, cfg.JWTAudience)
+	// 6. Initialize JWT token verifier with key ring support for zero-downtime rotation
+	authVerifier := auth.NewVerifier(cfg.JWTPublicKey, cfg.JWTIssuer, cfg.JWTAudience, cfg.JWTPublicKeys[1:]...)
 
 	// 7. Assemble API router with dependencies
 	router := api.NewRouter(api.RouterConfig{

@@ -22,6 +22,7 @@ func NewUserRoleHandler(service *service.Service) *UserRoleHandler {
 
 // Assign handles POST /api/v1/users/:id/roles.
 func (h *UserRoleHandler) Assign(c *gin.Context) {
+	principal := MustGetPrincipal(c)
 	userID := c.Param("id")
 	var req AssignRoleRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -31,7 +32,7 @@ func (h *UserRoleHandler) Assign(c *gin.Context) {
 		return
 	}
 
-	ur, err := h.service.AssignRole(c.Request.Context(), userID, req.RoleID, req.AssignedBy)
+	ur, err := h.service.AssignRole(c.Request.Context(), userID, req.RoleID, principal.UserID.String())
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrRoleNotFound):

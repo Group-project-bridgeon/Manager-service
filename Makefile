@@ -1,4 +1,4 @@
-.PHONY: help run build test lint tidy clean migrate-up migrate-down migrate-status
+.PHONY: help run build test lint tidy clean migrate-up migrate-down migrate-status postman
 
 # Default binary output
 BINARY_NAME=server
@@ -34,3 +34,6 @@ migrate-down: ## Rollback the most recent database migration
 
 migrate-status: ## Check the status of database migrations
 	go run ./cmd/migrate status
+
+postman: ## Generate Postman collection and environment files with fresh RS256 JWT tokens
+	go run ./cmd/postman

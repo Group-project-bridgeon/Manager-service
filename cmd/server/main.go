@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/group-project-bridgeon/manager-service/internal/api"
+	"github.com/group-project-bridgeon/manager-service/internal/auth"
 	"github.com/group-project-bridgeon/manager-service/internal/config"
 	"github.com/group-project-bridgeon/manager-service/internal/database"
 	"github.com/group-project-bridgeon/manager-service/internal/logger"
@@ -39,6 +40,7 @@ func run() error {
 
 	// 2. Initialize structured logging
 	log := logger.New(cfg.AppEnv, cfg.LogLevel, os.Stdout)
+	slog.SetDefault(log)
 	log.Info("starting ERP management server",
 		slog.String("env", cfg.AppEnv),
 		slog.Int("port", cfg.Port),
@@ -60,15 +62,19 @@ func run() error {
 	userRoleRepo := rbacRepo.NewPostgresUserRoleRepository(dbPool)
 	roleSvc := rbacService.New(roleRepo, userRoleRepo)
 
-	// 5. Wire Workflow business module: repository -> service (using userRoleRepo as authorizer)
+	// 5. Wire Workflow business module: repository -> service (using userRoleRepo as policy authorizer)
 	wfRepo := workflowRepo.NewPostgresWorkflowRepository(dbPool)
 	wfSvc := workflowService.New(wfRepo, userRoleRepo)
 
-	// 6. Assemble API router with dependencies
+	// 6. Initialize JWT token verifier with key ring support for zero-downtime rotation
+	authVerifier := auth.NewVerifier(cfg.JWTPublicKey, cfg.JWTIssuer, cfg.JWTAudience, cfg.JWTPublicKeys[1:]...)
+
+	// 7. Assemble API router with dependencies
 	router := api.NewRouter(api.RouterConfig{
 		AppEnv:          cfg.AppEnv,
 		Logger:          log,
 		Checker:         database.NewHealthChecker(dbPool),
+		AuthVerifier:    authVerifier,
 		RoleService:     roleSvc,
 		WorkflowService: wfSvc,
 	})

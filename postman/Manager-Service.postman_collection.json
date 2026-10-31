@@ -1,0 +1,1178 @@
+{
+  "info": {
+    "_postman_id": "e760f75e-f221-4a10-8b5e-1729dc03e9ef",
+    "name": "Manager Service API",
+    "description": "Comprehensive Postman test suite for Manager-service covering JWT Authentication, RBAC, Multi-level Approvals, OCC Concurrency, and Error Handling.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Health \u0026 System Checks",
+      "item": [
+        {
+          "name": "Liveness Probe (/healthz)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/healthz",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "healthz"
+              ]
+            },
+            "description": "Public health check endpoint. Returns 200 OK without requiring authentication."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Liveness response contains status ok\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"ok\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health Check (/health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/health",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Alias public health check endpoint."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Health response contains status ok\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"ok\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Readiness Probe (/readyz)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/readyz",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "readyz"
+              ]
+            },
+            "description": "Public readiness probe. Pings database connection pool. Returns 200 when healthy, 503 during DB outage."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Database connectivity verified\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"ready\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Workflow Approvals Lifecycle",
+      "item": [
+        {
+          "name": "Submit Approval Request (Under ₹50k - 1 Level)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{purchaser_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"{{resource_id}}\",\n  \"amount\": 35000\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/submit",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "submit"
+              ]
+            },
+            "description": "Submits a new purchasing bill for manager approval. Requester ID is derived strictly from JWT principal."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Response has standard success envelope and X-Request-ID header\", function () {",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData).to.have.property('data');",
+                  "    pm.response.to.have.header(\"X-Request-ID\");",
+                  "});",
+                  "pm.test(\"Workflow is pending with 1 required level\", function () {",
+                  "    pm.expect(jsonData.data.status).to.eql(\"pending\");",
+                  "    pm.expect(jsonData.data.current_level).to.eql(0);",
+                  "    pm.expect(jsonData.data.required_levels).to.eql(1);",
+                  "});",
+                  "if (jsonData.data \u0026\u0026 jsonData.data.id) {",
+                  "    pm.environment.set(\"approval_id\", jsonData.data.id);",
+                  "    pm.collectionVariables.set(\"approval_id\", jsonData.data.id);",
+                  "    console.log(\"Saved approval_id:\", jsonData.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Query Approval Status by Resource",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{purchaser_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/status?service=purchasing\u0026resource_id={{resource_id}}",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "service",
+                  "value": "purchasing"
+                },
+                {
+                  "key": "resource_id",
+                  "value": "{{resource_id}}"
+                }
+              ]
+            },
+            "description": "Queries the current approval status for a resource."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Matches requested resource_id\", function () {",
+                  "    pm.expect(jsonData.data.resource_id).to.eql(pm.variables.get(\"resource_id\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Approval Request \u0026 Audit History",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/{{approval_id}}",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{{approval_id}}"
+              ]
+            },
+            "description": "Returns approval request details along with complete immutable audit trail."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"History contains request and actions array\", function () {",
+                  "    pm.expect(jsonData.data).to.have.property('request');",
+                  "    pm.expect(jsonData.data).to.have.property('actions');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Approve Request (Level 1)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Approved via Postman API test\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/{{approval_id}}/approve",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{{approval_id}}",
+                "approve"
+              ]
+            },
+            "description": "Approver grants level 1 decision. Actor is derived strictly from JWT principal."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Status transitions to approved\", function () {",
+                  "    pm.expect(jsonData.data.status).to.eql(\"approved\");",
+                  "    pm.expect(jsonData.data.current_level).to.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit Multi-Level Request (\u003e= ₹50k - 2 Levels)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{purchaser_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"PO-MULTI-{{$timestamp}}\",\n  \"amount\": 85000\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/submit",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "submit"
+              ]
+            },
+            "description": "Amounts ₹50k+ require 2 distinct manager approval levels."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Requires 2 approval levels\", function () {",
+                  "    pm.expect(jsonData.data.required_levels).to.eql(2);",
+                  "});",
+                  "if (jsonData.data \u0026\u0026 jsonData.data.id) {",
+                  "    pm.environment.set(\"multi_approval_id\", jsonData.data.id);",
+                  "    pm.collectionVariables.set(\"multi_approval_id\", jsonData.data.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reject Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Exceeded departmental quarterly budget\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/{{multi_approval_id}}/reject",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{{multi_approval_id}}",
+                "reject"
+              ]
+            },
+            "description": "Terminates the workflow request in rejected status."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Status transitions to rejected\", function () {",
+                  "    pm.expect(jsonData.data.status).to.eql(\"rejected\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Roles \u0026 Access Control (RBAC)",
+      "item": [
+        {
+          "name": "List All Roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/roles",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "roles"
+              ]
+            },
+            "description": "Retrieves all registered roles in the system."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Returns array of roles\", function () {",
+                  "    pm.expect(Array.isArray(jsonData.data)).to.be.true;",
+                  "    pm.expect(jsonData.data.length).to.be.above(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Custom Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"id\": \"{{created_role_id}}\",\n  \"name\": \"Quality Auditor\",\n  \"description\": \"Reviews quality reports and approvals\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/roles",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "roles"
+              ]
+            },
+            "description": "Registers a new custom role."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Role matches created_role_id\", function () {",
+                  "    pm.expect(jsonData.data.id).to.eql(pm.variables.get(\"created_role_id\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Role by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/roles/{{created_role_id}}",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "{{created_role_id}}"
+              ]
+            },
+            "description": "Fetches details of a specific role by its ID."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Role name verified\", function () {",
+                  "    pm.expect(jsonData.data.name).to.eql(\"Quality Auditor\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign Role to User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_id\": \"{{created_role_id}}\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/users/{{test_user_id}}/roles",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{test_user_id}}",
+                "roles"
+              ]
+            },
+            "description": "Grants a role to a user. Assigned_by is extracted automatically from the JWT principal."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Assigned by matches admin user ID\", function () {",
+                  "    pm.expect(jsonData.data.assigned_by).to.not.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List User Assigned Roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/users/{{test_user_id}}/roles",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{test_user_id}}",
+                "roles"
+              ]
+            },
+            "description": "Returns all roles currently assigned to a user."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Contains newly assigned role\", function () {",
+                  "    var found = jsonData.data.some(function(r) { return r.id === pm.variables.get(\"created_role_id\"); });",
+                  "    pm.expect(found).to.be.true;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Authorization Check (Authz)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{test_user_id}}\",\n  \"service\": \"purchasing\",\n  \"resource\": \"bill\",\n  \"action\": \"approve\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/authz/check",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "authz",
+                "check"
+              ]
+            },
+            "description": "Evaluates whether user holds authority to execute an action on a service resource."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Authz response has allowed boolean\", function () {",
+                  "    pm.expect(jsonData.data).to.have.property('allowed');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revoke Role from User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/users/{{test_user_id}}/roles/{{created_role_id}}",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{test_user_id}}",
+                "roles",
+                "{{created_role_id}}"
+              ]
+            },
+            "description": "Revokes a granted role from a user."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Security \u0026 Error Enforcement",
+      "item": [
+        {
+          "name": "401 Unauthorized - Missing Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/status?service=purchasing\u0026resource_id=test",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "service",
+                  "value": "purchasing"
+                },
+                {
+                  "key": "resource_id",
+                  "value": "test"
+                }
+              ]
+            },
+            "description": "Calling protected endpoint without Authorization header must return 401 with WWW-Authenticate header."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401 Unauthorized\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test(\"Includes WWW-Authenticate Bearer header\", function () {",
+                  "    pm.response.to.have.header(\"WWW-Authenticate\");",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Error code is UNAUTHORIZED\", function () {",
+                  "    pm.expect(jsonData.error.code).to.eql(\"UNAUTHORIZED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "401 Unauthorized - Expired Token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{expired_token}}"
+              }
+            ],
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/status?service=purchasing\u0026resource_id=test",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "service",
+                  "value": "purchasing"
+                },
+                {
+                  "key": "resource_id",
+                  "value": "test"
+                }
+              ]
+            },
+            "description": "Presents an expired token. Must return 401 with code TOKEN_EXPIRED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 401 Unauthorized\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Error code is TOKEN_EXPIRED\", function () {",
+                  "    pm.expect(jsonData.error.code).to.eql(\"TOKEN_EXPIRED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 Forbidden - Missing Permission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{no_perm_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"test\",\n  \"amount\": 1000\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/submit",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "submit"
+              ]
+            },
+            "description": "Caller lacks manager.approvals:submit grant. Must return 403 PERMISSION_DENIED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403 Forbidden\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Error code is FORBIDDEN\", function () {",
+                  "    pm.expect(jsonData.error.code).to.eql(\"FORBIDDEN\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "403 Forbidden - Self-Approval Forbidden",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Attempting to approve my own bill\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/{{multi_approval_id}}/approve",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{{multi_approval_id}}",
+                "approve"
+              ]
+            },
+            "description": "If purchaser attempts to approve their own request, service forbids self-approval with 403 SELF_APPROVAL_FORBIDDEN."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Note: If multi_approval_id was already decided (e.g. rejected), 409 is returned.",
+                  "// If pending and same requester, 403 SELF_APPROVAL_FORBIDDEN is returned.",
+                  "pm.test(\"Returns 403 or 409 error envelope\", function () {",
+                  "    pm.expect([403, 409]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409 Conflict - Duplicate Active Submission",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{purchaser_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"{{resource_id}}\",\n  \"amount\": 35000\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/submit",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "submit"
+              ]
+            },
+            "description": "Submitting the same resource ID that already has an approved or pending workflow returns 409 Conflict."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409 Conflict\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Error code is DUPLICATE_SUBMISSION or REQUEST_ALREADY_DECIDED\", function () {",
+                  "    pm.expect([\"DUPLICATE_SUBMISSION\", \"REQUEST_ALREADY_DECIDED\"]).to.include(jsonData.error.code);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "409 Conflict - Already Decided Request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{manager_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Duplicate approval attempt\"\n}"
+            },
+            "url": {
+              "raw": "http://localhost:8080/api/v1/approvals/{{approval_id}}/approve",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{{approval_id}}",
+                "approve"
+              ]
+            },
+            "description": "Approving an already approved request returns 409 REQUEST_ALREADY_DECIDED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 409 Conflict\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Error code is REQUEST_ALREADY_DECIDED\", function () {",
+                  "    pm.expect(jsonData.error.code).to.eql(\"REQUEST_ALREADY_DECIDED\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "purchaser_token",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNzcxNSwibmJmIjoxNzkzNDI2ODc1LCJpYXQiOjE3OTM0MjY4NzUsInVzZXJfaWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJlbWFpbCI6InB1cmNoYXNlckBlcnAubG9jYWwiLCJ0b2tlbl92ZXJzaW9uIjoxLCJwZXJtaXNzaW9ucyI6WyJtYW5hZ2VyLmFwcHJvdmFsczpzdWJtaXQiLCJtYW5hZ2VyLmFwcHJvdmFsczpyZWFkIl19.XcHliBdE6g7rv-W17YX66EyD3vS4Yed5VCan1TXj3cSYRmeefzMzX0SbM18Gxv3UpiYH93vO_4CkssBL4NH1LtHB_DySRP-9sDO0byp7avJX0QtEHFQZdaA0gqDlvbhE1dn8sqJJ4a4Ag9SliPiwbxHmZz_CXx-QRO1mtCXCXMutomq1yXJqItKPk3i41FuO0bL0qRuWZF0F42BE1sGpvIZaYEPLNvfBUoU2MI2g5k7CdNHHbAJ01AevJGS8XJ7srMLZka3vGvmnLCZBufP7yncwTIBYnek9GTJQ5EVEu4ZoBjfZZe7CyloIQ0cUv3ZCiIka75HlCRauSH64gUSPyA",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "manager_token",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjIyMjIyMjIyLTIyMjItMjIyMi0yMjIyLTIyMjIyMjIyMjIyMiIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNzcxNSwibmJmIjoxNzkzNDI2ODc1LCJpYXQiOjE3OTM0MjY4NzUsInVzZXJfaWQiOiIyMjIyMjIyMi0yMjIyLTIyMjItMjIyMi0yMjIyMjIyMjIyMjIiLCJlbWFpbCI6Im1hbmFnZXJAZXJwLmxvY2FsIiwidG9rZW5fdmVyc2lvbiI6MSwicGVybWlzc2lvbnMiOlsibWFuYWdlci5hcHByb3ZhbHM6YXBwcm92ZSIsIm1hbmFnZXIuYXBwcm92YWxzOnJlamVjdCIsIm1hbmFnZXIuYXBwcm92YWxzOnJlYWQiXX0.QOYdlmu5-hPYiy-uaAs7D9UQATVAgS3_MjUwW5aQFBpcoRdtTgga3iyqNJ7R2QDneBntUeQWt-i_AR2vR_YE6-OeoUVrOutzzchzzUpiKJdtv4vTNIwDAiLHZX5WLg4LpZ4M80tui26LC9QE_dz4451oqZIuVnCSV_QR6DQpC3VTN5MMHYmQrANrIFrpxLYpF_gyP_ELUzIV6O872kcJKgiyDgTO2XUorjNjLMUwf_YZVjbmjUHWqQAdpjfroxwtsEN2juJEEHHcs8Ftao1WqvbQsnPNylNhsyGdbeRfTBqrBGs_o11pMTihYaYfGcZPcjd_x0RUtMQFQRkdZWexzg",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "admin_token",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjMzMzMzMzMzLTMzMzMtMzMzMy0zMzMzLTMzMzMzMzMzMzMzMyIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNzcxNSwibmJmIjoxNzkzNDI2ODc1LCJpYXQiOjE3OTM0MjY4NzUsInVzZXJfaWQiOiIzMzMzMzMzMy0zMzMzLTMzMzMtMzMzMy0zMzMzMzMzMzMzMzMiLCJlbWFpbCI6ImFkbWluQGVycC5sb2NhbCIsInRva2VuX3ZlcnNpb24iOjEsInBlcm1pc3Npb25zIjpbIm1hbmFnZXIuYXBwcm92YWxzOnN1Ym1pdCIsIm1hbmFnZXIuYXBwcm92YWxzOnJlYWQiLCJtYW5hZ2VyLmFwcHJvdmFsczphcHByb3ZlIiwibWFuYWdlci5hcHByb3ZhbHM6cmVqZWN0IiwibWFuYWdlci5yYmFjOm1hbmFnZSIsIm1hbmFnZXIuYXV0aHo6Y2hlY2siXX0.eOdbwGylEqF5GQxTiKXkoqhTFFCZsh1XPcJlqaFz7dMeg2aNdjbzO9n3ncgyOIluEg5Bqj15OHQxTiS8pAw2Ebe0JFDNvdOW15Y14igfZBdiAsDTtUpEVzhWlimrndymIajqDErNwo2kjwjtFca5bpFw7VPzTt41aKY6t9mp8xQ_nPlK2EYbOhrRvx0xNPXoYJrCJNgG56kbn0vSsu3_gs-Z3Cdu1Jva8sWBimXT2U_AVxUF7KJxjabUYwxOIOKcVMVvMaAg_Ea4TkOi-3bj7XarCUWIhw10IIOPHiRQtG7-zk9M8O_T5uHI4NL-RI_x73yEehXMQKqCx64236WXgw",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "no_perm_token",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjQ0NDQ0NDQ0LTQ0NDQtNDQ0NC00NDQ0LTQ0NDQ0NDQ0NDQ0NCIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNzcxNSwibmJmIjoxNzkzNDI2ODc1LCJpYXQiOjE3OTM0MjY4NzUsInVzZXJfaWQiOiI0NDQ0NDQ0NC00NDQ0LTQ0NDQtNDQ0NC00NDQ0NDQ0NDQ0NDQiLCJlbWFpbCI6Imd1ZXN0QGVycC5sb2NhbCIsInRva2VuX3ZlcnNpb24iOjEsInBlcm1pc3Npb25zIjpbXX0.f560VptPxfOfN15KMXePvXGuDOyKqjNm53RhaOEFLn9h58G5Ec7VEr1CFEmJ1K5Nn6jZ8bKogDNuuacGG2KtCaBJY0WuE4ZNFz7keLKEFqsEy-fzrxmGXB32UjXqwUzjfOxfS0302gjGqTn6PmD3OAeMshoGIcmY-so2wV0X_JpNvF2MXL87Udipg2mXMN4aCJzoAsGmFK5LDmzBVj0wKIPYT4sq9fkBfXqBmTMwaOyR0w0QfSja33x3qkrL0w6cpizFL79qmR1mnIbBRNDwgNR7-sOq5KEDlzzuMyXEUnFDpA5YRaC0fVXNK4x0Cek3m4UNYtUPfUhgTR_9Eo4ThA",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "expired_token",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjU1NTU1NTU1LTU1NTUtNTU1NS01NTU1LTU1NTU1NTU1NTU1NSIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNjU3NSwibmJmIjoxNzkzNDI1Njc1LCJpYXQiOjE3OTM0MjU2NzUsInVzZXJfaWQiOiI1NTU1NTU1NS01NTU1LTU1NTUtNTU1NS01NTU1NTU1NTU1NTUiLCJlbWFpbCI6ImV4cGlyZWRAZXJwLmxvY2FsIiwidG9rZW5fdmVyc2lvbiI6MSwicGVybWlzc2lvbnMiOlsibWFuYWdlci5hcHByb3ZhbHM6cmVhZCJdfQ.OlhNmFlczEq7G_Tjh0hxYnXN3jxiggnXf0mYo8XH5-mjdRZZdG7AWAc9URLIo4SGa3c1sRByoSkmziIMqA4-4SbOac7M59h1fVRtpeNz5VSbj7yy9lJRn2jgOZT1_FsaI69KSsDSszGPwh9VZJ-zZKvaXlbS7ARvCzhTf_0YTbpY71ByDqH7x_bv2t2nO83fPwC-YPzqsFExhVBXd2Nn22Q3-9Kfs5QYwbgEBj3eP0_TtArXort-dBvQ_8icFE0ClJdR0g0UzE1GIRKchy4o08f4JamlhQ_ImJFNLZn0tp4IaO6YP3sHNBnR1PpEJ-o_Md6tDdJD1-yEPA5pJqC-SA",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "resource_id",
+      "value": "PO-POSTMAN-26875",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "approval_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "multi_approval_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "test_user_id",
+      "value": "7c3b4f16-ac40-45ea-9f9c-b717c0a5b250",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "created_role_id",
+      "value": "role_6875",
+      "type": "default",
+      "enabled": true
+    }
+  ]
+}

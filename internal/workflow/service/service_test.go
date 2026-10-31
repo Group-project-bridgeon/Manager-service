@@ -43,12 +43,34 @@ func (m *mockWorkflowRepo) GetRequestByResource(ctx context.Context, serviceName
 	return nil, domain.ErrRequestNotFound
 }
 
+func (m *mockWorkflowRepo) GetActiveRequestByResource(ctx context.Context, serviceName, resourceID string) (*domain.ApprovalRequest, error) {
+	for _, req := range m.requests {
+		if req.Service == serviceName && req.ResourceID == resourceID && (req.Status == domain.StatusPending || req.Status == domain.StatusApproved) {
+			return &req, nil
+		}
+	}
+	return nil, nil
+}
+
 func (m *mockWorkflowRepo) UpdateRequest(ctx context.Context, req domain.ApprovalRequest) error {
 	m.requests[req.ID] = req
 	return nil
 }
 
 func (m *mockWorkflowRepo) RecordAction(ctx context.Context, action domain.ApprovalAction) error {
+	m.actions[action.RequestID] = append(m.actions[action.RequestID], action)
+	return nil
+}
+
+func (m *mockWorkflowRepo) ApplyDecisionTx(ctx context.Context, req domain.ApprovalRequest, action domain.ApprovalAction, expectedLevel int, expectedStatus domain.Status) error {
+	existing, exists := m.requests[req.ID]
+	if !exists {
+		return domain.ErrRequestNotFound
+	}
+	if existing.CurrentLevel != expectedLevel || existing.Status != expectedStatus {
+		return domain.ErrConcurrentUpdate
+	}
+	m.requests[req.ID] = req
 	m.actions[action.RequestID] = append(m.actions[action.RequestID], action)
 	return nil
 }
@@ -61,28 +83,10 @@ func (m *mockWorkflowRepo) ListActionsByRequestID(ctx context.Context, requestID
 	return m.actions[requestID], nil
 }
 
-type mockAuthorizer struct {
-	allowedRoles map[string][]string
-}
-
-func (m *mockAuthorizer) CheckPermission(ctx context.Context, userID, serviceName, resource, action string) (bool, []string, error) {
-	roles := m.allowedRoles[userID]
-	for _, r := range roles {
-		if r == "manager" || r == "admin" {
-			return true, roles, nil
-		}
-	}
-	return false, roles, nil
-}
-
 func TestWorkflowThresholds(t *testing.T) {
 	ctx := context.Background()
 	repo := newMockWorkflowRepo()
-	auth := &mockAuthorizer{allowedRoles: map[string][]string{
-		"mgr_1": {"manager"},
-		"mgr_2": {"manager"},
-	}}
-	svc := service.New(repo, auth)
+	svc := service.New(repo)
 
 	t.Run("under 50k requires 1 level", func(t *testing.T) {
 		req, err := svc.Submit(ctx, "purchasing", "bill_01", "purchaser_bob", 25000.00)

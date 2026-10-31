@@ -15,11 +15,28 @@ services:
       - WRITE_TIMEOUT=10s
       - IDLE_TIMEOUT=120s
       - SHUTDOWN_TIMEOUT=5s
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=password_change_in_production
+      - DB_NAME=erp_manager
+      - DB_SSLMODE=disable
+      - DB_MAX_CONNS=25
+      - DB_MIN_CONNS=5
+      - JWT_PUBLIC_KEY_PATH=/keys/jwt_public.pem
+      - JWT_ISSUER=erp-auth
+      - JWT_AUDIENCE=erp-api
+    volumes:
+      - ./keys/jwt_public.pem:/keys/jwt_public.pem:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - erp-network
 
-  # Prepared for Phase 2 (Database Layer)
   postgres:
     image: postgres:16-alpine
-    container_name: erp-postgres
+    container_name: erp-manager-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: erp_manager
@@ -34,8 +51,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-    profiles:
-      - db
+    networks:
+      - erp-network
 
 volumes:
   pgdata:
+
+networks:
+  erp-network:
+    driver: bridge

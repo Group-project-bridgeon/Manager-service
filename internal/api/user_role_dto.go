@@ -8,8 +8,7 @@ import (
 
 // AssignRoleRequest defines the payload for granting a role to a user.
 type AssignRoleRequest struct {
-	RoleID     string `json:"role_id" binding:"required"`
-	AssignedBy string `json:"assigned_by"`
+	RoleID string `json:"role_id" binding:"required"`
 }
 
 // UserRoleResponse represents the JSON output for a role assignment.

@@ -8,16 +8,14 @@ import (
 
 // SubmitApprovalRequestDTO represents the payload to submit a resource for approval.
 type SubmitApprovalRequestDTO struct {
-	Service     string  `json:"service" binding:"required"`
-	ResourceID  string  `json:"resource_id" binding:"required"`
-	RequesterID string  `json:"requester_id" binding:"required"`
-	Amount      float64 `json:"amount" binding:"required,gt=0"`
+	Service    string  `json:"service" binding:"required"`
+	ResourceID string  `json:"resource_id" binding:"required"`
+	Amount     float64 `json:"amount" binding:"required,gt=0"`
 }
 
 // ActionRequestDTO represents the payload for approving or rejecting a request.
 type ActionRequestDTO struct {
-	ActorID string `json:"actor_id" binding:"required"`
-	Notes   string `json:"notes"`
+	Notes string `json:"notes"`
 }
 
 // ApprovalRequestResponseDTO represents the JSON projection of an approval request.

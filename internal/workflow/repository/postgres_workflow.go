@@ -159,6 +159,95 @@ func (r *PostgresWorkflowRepository) RecordAction(ctx context.Context, action do
 	return nil
 }
 
+// ApplyDecisionTx updates an approval request and records an immutable audit action atomically within a single database transaction.
+// It uses optimistic concurrency control (checking expectedLevel and expectedStatus) to prevent race conditions during concurrent decisions.
+func (r *PostgresWorkflowRepository) ApplyDecisionTx(ctx context.Context, req domain.ApprovalRequest, action domain.ApprovalAction, expectedLevel int, expectedStatus domain.Status) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("starting decision transaction: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback(ctx)
+	}()
+
+	updateQuery := `
+		UPDATE approval_requests
+		SET status = $1, current_level = $2, updated_at = $3
+		WHERE id = $4 AND current_level = $5 AND status = $6
+	`
+	res, err := tx.Exec(ctx, updateQuery,
+		string(req.Status),
+		req.CurrentLevel,
+		req.UpdatedAt,
+		req.ID,
+		expectedLevel,
+		string(expectedStatus),
+	)
+	if err != nil {
+		return fmt.Errorf("updating approval request state: %w", err)
+	}
+
+	if res.RowsAffected() == 0 {
+		return domain.ErrConcurrentUpdate
+	}
+
+	insertActionQuery := `
+		INSERT INTO approval_actions (id, request_id, actor_id, action, level, notes, created_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
+	`
+	_, err = tx.Exec(ctx, insertActionQuery,
+		action.ID,
+		action.RequestID,
+		action.ActorID,
+		action.Action,
+		action.Level,
+		action.Notes,
+		action.CreatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("recording approval audit action: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("committing decision transaction: %w", err)
+	}
+
+	return nil
+}
+
+// GetActiveRequestByResource finds an active (pending or approved) approval request for a service resource.
+func (r *PostgresWorkflowRepository) GetActiveRequestByResource(ctx context.Context, serviceName, resourceID string) (*domain.ApprovalRequest, error) {
+	query := `
+		SELECT id, service, resource_id, amount, requester_id, status, current_level, required_levels, expires_at, created_at, updated_at
+		FROM approval_requests
+		WHERE service = $1 AND resource_id = $2 AND status IN ('pending', 'approved')
+		LIMIT 1
+	`
+	var req domain.ApprovalRequest
+	var statusStr string
+	err := r.pool.QueryRow(ctx, query, serviceName, resourceID).Scan(
+		&req.ID,
+		&req.Service,
+		&req.ResourceID,
+		&req.Amount,
+		&req.RequesterID,
+		&statusStr,
+		&req.CurrentLevel,
+		&req.RequiredLevels,
+		&req.ExpiresAt,
+		&req.CreatedAt,
+		&req.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil // No active request found
+		}
+		return nil, fmt.Errorf("querying active request for resource %s: %w", resourceID, err)
+	}
+	req.Status = domain.Status(statusStr)
+	return &req, nil
+}
+
 // GetMatchingPolicy finds custom threshold policies if defined in the database.
 func (r *PostgresWorkflowRepository) GetMatchingPolicy(ctx context.Context, serviceName, resourceType string, amount float64) (*domain.ApprovalPolicy, error) {
 	query := `

@@ -1,0 +1,28 @@
+# Git
+.git
+.gitignore
+
+# Environment and Secrets (NEVER INCLUDE IN IMAGES)
+.env
+.env.*
+!.env.example
+keys/
+*.pem
+*.key
+
+# Binaries and build artifacts
+bin/
+dist/
+*.test
+*.out
+coverage.html
+profile.pprof
+
+# IDE and OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "ea929920-7820-461a-93a8-99362df70054",
+    "_postman_id": "628ff3f7-689e-4c26-998c-20e782c50a8a",
     "name": "Manager Service API",
     "description": "Comprehensive Postman test suite for Manager-service covering JWT Authentication, RBAC, Multi-level Approvals, OCC Concurrency, and Error Handling.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -15,7 +15,15 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/healthz"
+              "raw": "http://localhost:8080/healthz",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "healthz"
+              ]
             },
             "description": "Public health check endpoint. Returns 200 OK without requiring authentication."
           },
@@ -43,7 +51,15 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/health"
+              "raw": "http://localhost:8080/health",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "health"
+              ]
             },
             "description": "Alias public health check endpoint."
           },
@@ -71,7 +87,15 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/readyz"
+              "raw": "http://localhost:8080/readyz",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "readyz"
+              ]
             },
             "description": "Public readiness probe. Pings database connection pool. Returns 200 when healthy, 503 during DB outage."
           },
@@ -117,7 +141,18 @@
               "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"{{resource_id}}\",\n  \"amount\": 35000\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/submit"
+              "raw": "http://localhost:8080/api/v1/approvals/submit",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "submit"
+              ]
             },
             "description": "Submits a new purchasing bill for manager approval. Requester ID is derived strictly from JWT principal."
           },
@@ -161,7 +196,28 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/status?service=purchasing\u0026resource_id={{resource_id}}"
+              "raw": "http://localhost:8080/api/v1/approvals/status?service=purchasing\u0026resource_id={{resource_id}}",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "service",
+                  "value": "purchasing"
+                },
+                {
+                  "key": "resource_id",
+                  "value": "{{resource_id}}"
+                }
+              ]
             },
             "description": "Queries the current approval status for a resource."
           },
@@ -194,7 +250,18 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/{{approval_id}}"
+              "raw": "http://localhost:8080/api/v1/approvals/{{approval_id}}",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{{approval_id}}"
+              ]
             },
             "description": "Returns approval request details along with complete immutable audit trail."
           },
@@ -236,7 +303,19 @@
               "raw": "{\n  \"notes\": \"Approved via Postman API test\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/{{approval_id}}/approve"
+              "raw": "http://localhost:8080/api/v1/approvals/{{approval_id}}/approve",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{{approval_id}}",
+                "approve"
+              ]
             },
             "description": "Approver grants level 1 decision. Actor is derived strictly from JWT principal."
           },
@@ -278,7 +357,18 @@
               "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"PO-MULTI-{{$timestamp}}\",\n  \"amount\": 85000\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/submit"
+              "raw": "http://localhost:8080/api/v1/approvals/submit",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "submit"
+              ]
             },
             "description": "Amounts ₹50k+ require 2 distinct manager approval levels."
           },
@@ -323,7 +413,19 @@
               "raw": "{\n  \"notes\": \"Exceeded departmental quarterly budget\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/{{multi_approval_id}}/reject"
+              "raw": "http://localhost:8080/api/v1/approvals/{{multi_approval_id}}/reject",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{{multi_approval_id}}",
+                "reject"
+              ]
             },
             "description": "Terminates the workflow request in rejected status."
           },
@@ -361,7 +463,17 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/roles"
+              "raw": "http://localhost:8080/api/v1/roles",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "roles"
+              ]
             },
             "description": "Retrieves all registered roles in the system."
           },
@@ -403,7 +515,17 @@
               "raw": "{\n  \"id\": \"{{created_role_id}}\",\n  \"name\": \"Quality Auditor\",\n  \"description\": \"Reviews quality reports and approvals\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/roles"
+              "raw": "http://localhost:8080/api/v1/roles",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "roles"
+              ]
             },
             "description": "Registers a new custom role."
           },
@@ -436,7 +558,18 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/roles/{{created_role_id}}"
+              "raw": "http://localhost:8080/api/v1/roles/{{created_role_id}}",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "roles",
+                "{{created_role_id}}"
+              ]
             },
             "description": "Fetches details of a specific role by its ID."
           },
@@ -477,7 +610,19 @@
               "raw": "{\n  \"role_id\": \"{{created_role_id}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles"
+              "raw": "http://localhost:8080/api/v1/users/{{test_user_id}}/roles",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{test_user_id}}",
+                "roles"
+              ]
             },
             "description": "Grants a role to a user. Assigned_by is extracted automatically from the JWT principal."
           },
@@ -510,7 +655,19 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles"
+              "raw": "http://localhost:8080/api/v1/users/{{test_user_id}}/roles",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{test_user_id}}",
+                "roles"
+              ]
             },
             "description": "Returns all roles currently assigned to a user."
           },
@@ -552,7 +709,18 @@
               "raw": "{\n  \"user_id\": \"{{test_user_id}}\",\n  \"service\": \"purchasing\",\n  \"resource\": \"bill\",\n  \"action\": \"approve\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/authz/check"
+              "raw": "http://localhost:8080/api/v1/authz/check",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "authz",
+                "check"
+              ]
             },
             "description": "Evaluates whether user holds authority to execute an action on a service resource."
           },
@@ -585,7 +753,20 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles/{{created_role_id}}"
+              "raw": "http://localhost:8080/api/v1/users/{{test_user_id}}/roles/{{created_role_id}}",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "{{test_user_id}}",
+                "roles",
+                "{{created_role_id}}"
+              ]
             },
             "description": "Revokes a granted role from a user."
           },
@@ -614,7 +795,28 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/status?service=purchasing\u0026resource_id=test"
+              "raw": "http://localhost:8080/api/v1/approvals/status?service=purchasing\u0026resource_id=test",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "service",
+                  "value": "purchasing"
+                },
+                {
+                  "key": "resource_id",
+                  "value": "test"
+                }
+              ]
             },
             "description": "Calling protected endpoint without Authorization header must return 401 with WWW-Authenticate header."
           },
@@ -650,7 +852,28 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/status?service=purchasing\u0026resource_id=test"
+              "raw": "http://localhost:8080/api/v1/approvals/status?service=purchasing\u0026resource_id=test",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "service",
+                  "value": "purchasing"
+                },
+                {
+                  "key": "resource_id",
+                  "value": "test"
+                }
+              ]
             },
             "description": "Presents an expired token. Must return 401 with code TOKEN_EXPIRED."
           },
@@ -691,7 +914,18 @@
               "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"test\",\n  \"amount\": 1000\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/submit"
+              "raw": "http://localhost:8080/api/v1/approvals/submit",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "submit"
+              ]
             },
             "description": "Caller lacks manager.approvals:submit grant. Must return 403 PERMISSION_DENIED."
           },
@@ -732,7 +966,19 @@
               "raw": "{\n  \"notes\": \"Attempting to approve my own bill\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/{{multi_approval_id}}/approve"
+              "raw": "http://localhost:8080/api/v1/approvals/{{multi_approval_id}}/approve",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{{multi_approval_id}}",
+                "approve"
+              ]
             },
             "description": "If purchaser attempts to approve their own request, service forbids self-approval with 403 SELF_APPROVAL_FORBIDDEN."
           },
@@ -742,6 +988,8 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
+                  "// Note: If multi_approval_id was already decided (e.g. rejected), 409 is returned.",
+                  "// If pending and same requester, 403 SELF_APPROVAL_FORBIDDEN is returned.",
                   "pm.test(\"Returns 403 or 409 error envelope\", function () {",
                   "    pm.expect([403, 409]).to.include(pm.response.code);",
                   "});"
@@ -769,7 +1017,18 @@
               "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"{{resource_id}}\",\n  \"amount\": 35000\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/submit"
+              "raw": "http://localhost:8080/api/v1/approvals/submit",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "submit"
+              ]
             },
             "description": "Submitting the same resource ID that already has an approved or pending workflow returns 409 Conflict."
           },
@@ -810,7 +1069,19 @@
               "raw": "{\n  \"notes\": \"Duplicate approval attempt\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/{{approval_id}}/approve"
+              "raw": "http://localhost:8080/api/v1/approvals/{{approval_id}}/approve",
+              "protocol": "http",
+              "host": [
+                "localhost"
+              ],
+              "port": "8080",
+              "path": [
+                "api",
+                "v1",
+                "approvals",
+                "{{approval_id}}",
+                "approve"
+              ]
             },
             "description": "Approving an already approved request returns 409 REQUEST_ALREADY_DECIDED."
           },
@@ -844,37 +1115,37 @@
     },
     {
       "key": "purchaser_token",
-      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNjc2NSwibmJmIjoxNzkzNDI1OTI1LCJpYXQiOjE3OTM0MjU5MjUsInVzZXJfaWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJlbWFpbCI6InB1cmNoYXNlckBlcnAubG9jYWwiLCJ0b2tlbl92ZXJzaW9uIjoxLCJwZXJtaXNzaW9ucyI6WyJtYW5hZ2VyLmFwcHJvdmFsczpzdWJtaXQiLCJtYW5hZ2VyLmFwcHJvdmFsczpyZWFkIl19.Fox7HL2yrKNfZqMTHt9vhedA29K3VhSBEp__KKfp8Twx-fRhz_5MHvHZ9Ldfc-zodE8E_zNmEqVNE-vlqhfFuAxghFCbqZJwP14ZmwK2NkmuMXCAGUcryZMdFmexgIyqSpwUszd58PmDYBG2QdpDhB0GBzh9wzqUtvOSUq9ifk5hOQwumujB5DwfFlBIE69ImbewzDKOpu8BeOfhnr63TOggxLSS61jUL0uUpWHFUXZuF4axaVmR1odpnGjXAoWBTKqVdQNc2As4FzAOftQX1ENdGbGvO6wSV6uBJuhaVm_DlnDH8WR4pZTy3OzJce_rEyqo7huIOmzhax3VowMlLA",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNzM3MCwibmJmIjoxNzkzNDI2NTMwLCJpYXQiOjE3OTM0MjY1MzAsInVzZXJfaWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJlbWFpbCI6InB1cmNoYXNlckBlcnAubG9jYWwiLCJ0b2tlbl92ZXJzaW9uIjoxLCJwZXJtaXNzaW9ucyI6WyJtYW5hZ2VyLmFwcHJvdmFsczpzdWJtaXQiLCJtYW5hZ2VyLmFwcHJvdmFsczpyZWFkIl19.TvJeyPWEZLzva5JFWwJ8fBvOa2mV06QU-hkaKd5PkktpERb_9_6l45NoCC84Mr-hqf2wnsvNjfEQvIsPwc9NuuTKgxSD3efvNQGnTDbbOZwqxyN4mrbiRDb7owNBI7S5YK--kagkgmYJsfswgSzpRgh7O2HA5tqrb3zFMfOXi6yGPOPvkLEuy9Gyq0egoYXQqChfPIhzKZ-5YoAAzUs5a6AmT_RyRFAV56kUzWOrx5HtTbTIbeoGPC9zTo7KliPEhf6M5rkWMj9NZ6NQm0QkDeyDdkoiBWwyyugrJYGzgXLo-erGabC3Suymwjpq_gY9o0xc1Ws6y6KzFDNYajajyA",
       "type": "secret",
       "enabled": true
     },
     {
       "key": "manager_token",
-      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjIyMjIyMjIyLTIyMjItMjIyMi0yMjIyLTIyMjIyMjIyMjIyMiIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNjc2NSwibmJmIjoxNzkzNDI1OTI1LCJpYXQiOjE3OTM0MjU5MjUsInVzZXJfaWQiOiIyMjIyMjIyMi0yMjIyLTIyMjItMjIyMi0yMjIyMjIyMjIyMjIiLCJlbWFpbCI6Im1hbmFnZXJAZXJwLmxvY2FsIiwidG9rZW5fdmVyc2lvbiI6MSwicGVybWlzc2lvbnMiOlsibWFuYWdlci5hcHByb3ZhbHM6YXBwcm92ZSIsIm1hbmFnZXIuYXBwcm92YWxzOnJlamVjdCIsIm1hbmFnZXIuYXBwcm92YWxzOnJlYWQiXX0.aRJK6HybU3SvyAfbWh8I7AzLJEvgG4KxWgC_u1E0KITa87Ri-95yBlHcT0EHavSbsFqSNrlXImGzzRyX-RBeqyhXuJy3my7VUu1G3aAJ164uDmIXfIB_I8ccTIfVBU9uu8tQOHtaV27Rva-vWqDIn1emxqc_9kjkuQ1k6_KQc11A5urcxUs_sPNu9MIg2kqsLPDRUj1J8EncHq-zqwByxC508N559PSzpOMY2r1LlsPJ9Yu2GHt8saCUZG1wQsbtSi172QyXOBb0K_bN__e8k_NClq9rDlmE0s3SNnb_tyTjW4b_kp06U-i-tDeCzzStGs6enmegjVxqOesTlSGg9A",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjIyMjIyMjIyLTIyMjItMjIyMi0yMjIyLTIyMjIyMjIyMjIyMiIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNzM3MCwibmJmIjoxNzkzNDI2NTMwLCJpYXQiOjE3OTM0MjY1MzAsInVzZXJfaWQiOiIyMjIyMjIyMi0yMjIyLTIyMjItMjIyMi0yMjIyMjIyMjIyMjIiLCJlbWFpbCI6Im1hbmFnZXJAZXJwLmxvY2FsIiwidG9rZW5fdmVyc2lvbiI6MSwicGVybWlzc2lvbnMiOlsibWFuYWdlci5hcHByb3ZhbHM6YXBwcm92ZSIsIm1hbmFnZXIuYXBwcm92YWxzOnJlamVjdCIsIm1hbmFnZXIuYXBwcm92YWxzOnJlYWQiXX0.rdo1U6VG9l40mCkZnUn4gNVNhokhnCku8CROQBJWjUxNDvUdwwRFbobIJCdixhEcRc9ym4GKd2vv2Tc36qyYFq5uC1VSNAg852fJPkkNZ4i7xB_dNDEZpBS3d20noV5_cZ0E-miro3x3WuaF-zq3JxxDM-TezZT3MmCOeOr2SCkUGNUT8CktL-eP59Q2ev5HrZRn9Ee7LSA9TAhEX0kj8vvat4hWCc-0zZmkO9QmcQmdFAAR_de0qPKTZBs3z4dKufZF_9yJKFdWPt3YStXdYmjj1RKLEF0F-uMunnzGv9C9guzqeyHK-pChkKKlKlbhLohye8sME86s3_6mlLM1zA",
       "type": "secret",
       "enabled": true
     },
     {
       "key": "admin_token",
-      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjMzMzMzMzMzLTMzMzMtMzMzMy0zMzMzLTMzMzMzMzMzMzMzMyIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNjc2NSwibmJmIjoxNzkzNDI1OTI1LCJpYXQiOjE3OTM0MjU5MjUsInVzZXJfaWQiOiIzMzMzMzMzMy0zMzMzLTMzMzMtMzMzMy0zMzMzMzMzMzMzMzMiLCJlbWFpbCI6ImFkbWluQGVycC5sb2NhbCIsInRva2VuX3ZlcnNpb24iOjEsInBlcm1pc3Npb25zIjpbIm1hbmFnZXIuYXBwcm92YWxzOnN1Ym1pdCIsIm1hbmFnZXIuYXBwcm92YWxzOnJlYWQiLCJtYW5hZ2VyLmFwcHJvdmFsczphcHByb3ZlIiwibWFuYWdlci5hcHByb3ZhbHM6cmVqZWN0IiwibWFuYWdlci5yYmFjOm1hbmFnZSIsIm1hbmFnZXIuYXV0aHo6Y2hlY2siXX0.J9P40TwF5KDEKFHUfSowZTI2oGGySRFceJQKTUEEj08wwBH9i_XozR8DqS1mxvpn1Myixm5VWM8HpIhaes1Rasks87R8WFKWVqk5u-TpknBj13PfT10Zx2J69aki95xNTFV2rYZpVB4xGkkqb2pDzbE3Cw-0URR5fCOrBeCEYnu3Uj2NDG15XFWUWEuN2BdP7BZ-tVg105aNmXOirwhYFUF6tNbpLIGF0ijR3IvSRYtIs-VwB4t1_DnRdlkM19DmfN2d7cwthl3fxC5pRZ9Az5nnGG61X7L1Ww5qduGRd3VEFPXOofjRiQ1MX8nVY8wZRwo2hib_Vn0gP7PGBvpZaw",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjMzMzMzMzMzLTMzMzMtMzMzMy0zMzMzLTMzMzMzMzMzMzMzMyIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNzM3MCwibmJmIjoxNzkzNDI2NTMwLCJpYXQiOjE3OTM0MjY1MzAsInVzZXJfaWQiOiIzMzMzMzMzMy0zMzMzLTMzMzMtMzMzMy0zMzMzMzMzMzMzMzMiLCJlbWFpbCI6ImFkbWluQGVycC5sb2NhbCIsInRva2VuX3ZlcnNpb24iOjEsInBlcm1pc3Npb25zIjpbIm1hbmFnZXIuYXBwcm92YWxzOnN1Ym1pdCIsIm1hbmFnZXIuYXBwcm92YWxzOnJlYWQiLCJtYW5hZ2VyLmFwcHJvdmFsczphcHByb3ZlIiwibWFuYWdlci5hcHByb3ZhbHM6cmVqZWN0IiwibWFuYWdlci5yYmFjOm1hbmFnZSIsIm1hbmFnZXIuYXV0aHo6Y2hlY2siXX0.VRAye5tJZAn4NFSNBx3TBxVQM3LHnFMIJbr8gyfFEtigwGe93UsCOaoyOdiP7wcPf2N-JVG1UB3Gg14bQFIMlv3FYwMkg6GHmBo3f8K46R_DRe-OQAj_cuPOfJLdA7aABRU1-wTlmqnIbHpIljTizYRbQ67dJPNDMiuQ2Dq1MFTPYLVsbWljK9tmQd3wmsqhq8bDnO_d5Kho7CceDbzq5tPTTOqSqOJ_A6TyTzBsB0LJax_hNryfBGP227DVqIdUOOG9Qb4_DM3IDP0-u4jnb-4g96kWruFJlfpWu1HndU_wkH1rySSiPXtNDJVbTTU3v6J5zywmOci1hLzZRQB6_g",
       "type": "secret",
       "enabled": true
     },
     {
       "key": "no_perm_token",
-      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjQ0NDQ0NDQ0LTQ0NDQtNDQ0NC00NDQ0LTQ0NDQ0NDQ0NDQ0NCIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNjc2NSwibmJmIjoxNzkzNDI1OTI1LCJpYXQiOjE3OTM0MjU5MjUsInVzZXJfaWQiOiI0NDQ0NDQ0NC00NDQ0LTQ0NDQtNDQ0NC00NDQ0NDQ0NDQ0NDQiLCJlbWFpbCI6Imd1ZXN0QGVycC5sb2NhbCIsInRva2VuX3ZlcnNpb24iOjEsInBlcm1pc3Npb25zIjpbXX0.epWKjePd7Bm5T0vvmawOysFuujUvdNYvAxUuqqwrE65us7_35OnF2EHpcNV6cAWUSVRvjcMBwkwQnB9Lz-b2MiPQ3SjOnFEgMaMcVHHtBxNJ1aiN2HT9fDD0JkSfI5ct6uW9nAt17bEI2sFJ48X2OWBK59_BHHEwM0FGfnllRU8VjkX_H39RnGJfX6Gk-6ud6rEDgI6hUisc4QniuUZd8SiSoKXxK0HReenpn0ulcH3WS0Z6cAXeDSq8YJEXY60Xgyc1jeL0IvjoDNTTEQX1pcQODTxK73NByP7SElduFm9WBSaLUkePfK0rJ37UfFmsgmJ2fjFpuirJ-xX0oiJo7Q",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjQ0NDQ0NDQ0LTQ0NDQtNDQ0NC00NDQ0LTQ0NDQ0NDQ0NDQ0NCIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNzM3MCwibmJmIjoxNzkzNDI2NTMwLCJpYXQiOjE3OTM0MjY1MzAsInVzZXJfaWQiOiI0NDQ0NDQ0NC00NDQ0LTQ0NDQtNDQ0NC00NDQ0NDQ0NDQ0NDQiLCJlbWFpbCI6Imd1ZXN0QGVycC5sb2NhbCIsInRva2VuX3ZlcnNpb24iOjEsInBlcm1pc3Npb25zIjpbXX0.seF9OPpyrCB8B0FXS0aZoIuA6PsGxd9tklGAoHCr70Np1sXw0vcpHGNhGO5CDM7D2DKmeFqurBe8n1USHVcTVi523oSkZDHatM2fziO6M3mebdZdUsORGOJIHI9fsAVPUFxoLxpugJlhDfWnksm29lJ9rGLkmxcNVLY6Ovm68CTOvMOGOGzfjC-yLfm0n_QQLmYyNR3a_KOX_kTZKEeikNzgLFUnN7vIS68BFeg8AZ-gEi87APIbWeumlq4cLMEjrtDZvwfjvLs8PpDcsKcEvx26PijMbtOKB88BuoKAiIeivs-_Lxh9RARmyH1tDg_ItbaQgMfq2ZOFI5MA1R0JEg",
       "type": "secret",
       "enabled": true
     },
     {
       "key": "expired_token",
-      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjU1NTU1NTU1LTU1NTUtNTU1NS01NTU1LTU1NTU1NTU1NTU1NSIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNTYyNSwibmJmIjoxNzkzNDI0NzI1LCJpYXQiOjE3OTM0MjQ3MjUsInVzZXJfaWQiOiI1NTU1NTU1NS01NTU1LTU1NTUtNTU1NS01NTU1NTU1NTU1NTUiLCJlbWFpbCI6ImV4cGlyZWRAZXJwLmxvY2FsIiwidG9rZW5fdmVyc2lvbiI6MSwicGVybWlzc2lvbnMiOlsibWFuYWdlci5hcHByb3ZhbHM6cmVhZCJdfQ.FpfyPkbtNRaZyLNU3xP9rw5wf37wRIJWfbYrIRAO3i0qKKdzDKeLCLo8wGY_J1mlnY8toN6J8iDAVdrbnFh3DMDOJU-06wgqSVOkxbecmAEIwTx3YFbS0nUaSqEy7fWDPG29F5-SGN1Vze9wLlnzQWN1t7wFzi__ARfi1J_VAJefKDPEPsLK4BEpHPWWJRIy9a6H47SIZYNF8tkGdrY0BLyiyuy-f09XH2SP8XQ_LaCF7uaR_PDQFihi9spaJIpOoX7fXyLjbEDyvDacd-vyny0hOxwfnJDjjBLu4r7dLhAN3vmO_AmHglahSyBntK-aKGNup026KWkzcB8a6HH9Sg",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjU1NTU1NTU1LTU1NTUtNTU1NS01NTU1LTU1NTU1NTU1NTU1NSIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNjIzMCwibmJmIjoxNzkzNDI1MzMwLCJpYXQiOjE3OTM0MjUzMzAsInVzZXJfaWQiOiI1NTU1NTU1NS01NTU1LTU1NTUtNTU1NS01NTU1NTU1NTU1NTUiLCJlbWFpbCI6ImV4cGlyZWRAZXJwLmxvY2FsIiwidG9rZW5fdmVyc2lvbiI6MSwicGVybWlzc2lvbnMiOlsibWFuYWdlci5hcHByb3ZhbHM6cmVhZCJdfQ.sV35_50MGKA63t-7FdZn-phQDGLVvLSapgdDZ2o_TSKdKV7D62fMs8yvnYmR07kdZcET5zCizz33CO84QrkWAV3v9nJ-EZz3q7UCEIMOOhmCDvksWEp8Pa_3sMk3f3I2Pjp4ldXPhh-gDcb4IMs9yWfhjYtcDANyNQzvy2DU7yMUGmHtpDYdy865FWBEF-9JmS-JH-BcraHd2e-HwxwmHI5dFTe6GiwzQB6eU-ScgtovybpuTv4kcOqVZ43OPRkyQ32ZM-uCJS3DAWZgJfiW_F5BKyg2CGDoXlV55Hcfx-jDCzMbDtyX67ry-aSGbz97Nk-Xx_tPV1dzgM9FWeAXLA",
       "type": "secret",
       "enabled": true
     },
     {
       "key": "resource_id",
-      "value": "PO-POSTMAN-25925",
+      "value": "PO-POSTMAN-26530",
       "type": "default",
       "enabled": true
     },
@@ -892,13 +1163,13 @@
     },
     {
       "key": "test_user_id",
-      "value": "a2186862-4e2f-4d2a-b7b2-a694d02bcae2",
+      "value": "1add8c0d-7ca6-4c8f-9391-a2439e8e1fe1",
       "type": "default",
       "enabled": true
     },
     {
       "key": "created_role_id",
-      "value": "role_5925",
+      "value": "role_6530",
       "type": "default",
       "enabled": true
     }

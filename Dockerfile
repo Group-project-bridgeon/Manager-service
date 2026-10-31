@@ -1,7 +1,7 @@
 # ------------------------------------------------------------------------------
 # Stage 1: Build static Go binary
 # ------------------------------------------------------------------------------
-FROM golang:alpine AS builder
+FROM golang:1.27.2-alpine AS builder
 
 WORKDIR /build
 
@@ -15,6 +15,7 @@ RUN go mod download
 # Copy source code and build statically
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /bin/server ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /bin/migrate ./cmd/migrate
 
 # ------------------------------------------------------------------------------
 # Stage 2: Minimal, secure runtime image
@@ -28,8 +29,10 @@ RUN adduser -D -u 10001 -s /sbin/nologin appuser
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
 
-# Copy compiled binary from builder
+# Copy compiled binaries and migrations from builder
 COPY --from=builder /bin/server /usr/local/bin/server
+COPY --from=builder /bin/migrate /usr/local/bin/migrate
+COPY --from=builder /build/migrations /migrations
 
 # Run as unprivileged user
 USER appuser

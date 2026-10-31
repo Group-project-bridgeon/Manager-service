@@ -1,4 +1,3 @@
--- +goose Up
 -- Enable pgcrypto for UUID generation if not exists
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -91,12 +90,3 @@ INSERT INTO roles (id, name, description) VALUES
     ('inventory_clerk', 'Inventory Clerk', 'Adjusts and receives stock'),
     ('accountant', 'Accountant', 'Views approved bills, creates payables')
 ON CONFLICT (id) DO NOTHING;
-
--- +goose Down
-DROP TABLE IF EXISTS approval_actions;
-DROP TABLE IF EXISTS approval_requests;
-DROP TABLE IF EXISTS approval_policies;
-DROP TABLE IF EXISTS user_roles;
-DROP TABLE IF EXISTS role_permissions;
-DROP TABLE IF EXISTS permissions;
-DROP TABLE IF EXISTS roles;

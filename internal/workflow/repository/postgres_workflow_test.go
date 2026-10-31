@@ -165,12 +165,12 @@ func TestPostgresWorkflowRepository_ConcurrencyAndAtomicity(t *testing.T) {
 			t.Fatalf("failed creating first request: %v", err)
 		}
 
-		// Attempting duplicate pending request for same resource
+		// Attempting duplicate pending request for same resource returns domain.ErrDuplicateSubmission
 		req2 := req1
 		req2.ID = uuid.New().String()
 		err := repo.CreateRequest(ctx, req2)
-		if err == nil {
-			t.Fatalf("expected error on duplicate active request submission, got nil")
+		if !errors.Is(err, domain.ErrDuplicateSubmission) {
+			t.Fatalf("expected ErrDuplicateSubmission, got: %v", err)
 		}
 	})
 

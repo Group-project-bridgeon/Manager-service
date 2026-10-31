@@ -61,7 +61,7 @@ func (m *mockWfRepo) GetActiveRequestByResource(ctx context.Context, serviceName
 			return &req, nil
 		}
 	}
-	return nil, domain.ErrRequestNotFound
+	return nil, nil
 }
 
 func (m *mockWfRepo) UpdateRequest(ctx context.Context, req domain.ApprovalRequest) error {

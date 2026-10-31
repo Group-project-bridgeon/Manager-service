@@ -4,6 +4,7 @@ package service
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -67,11 +68,21 @@ func (s *Service) Submit(ctx context.Context, serviceName, resourceID, requester
 
 	// Prevent duplicate submissions: reject if an active (pending or approved) request already exists for this resource
 	activeReq, err := s.repo.GetActiveRequestByResource(ctx, serviceName, resourceID)
-	if err == nil && activeReq != nil {
-		if activeReq.Status == domain.StatusPending {
-			return nil, domain.ErrDuplicateSubmission
-		}
-		if activeReq.Status == domain.StatusApproved {
+	if err != nil && !errors.Is(err, domain.ErrRequestNotFound) {
+		return nil, fmt.Errorf("checking active requests: %w", err)
+	}
+	if activeReq != nil {
+		switch activeReq.Status {
+		case domain.StatusPending:
+			// If previous pending request has expired, transition it to expired and allow resubmission
+			if activeReq.ExpiresAt != nil && time.Now().UTC().After(*activeReq.ExpiresAt) {
+				activeReq.Status = domain.StatusExpired
+				activeReq.UpdatedAt = time.Now().UTC()
+				_ = s.repo.UpdateRequest(ctx, *activeReq)
+			} else {
+				return nil, domain.ErrDuplicateSubmission
+			}
+		case domain.StatusApproved:
 			return nil, domain.ErrRequestAlreadyDecided
 		}
 	}
@@ -125,13 +136,22 @@ func (s *Service) Approve(ctx context.Context, requestID, actorID, notes string)
 
 	allowSelfApproval := false
 	var requiredRole string
-	if policy, pErr := s.repo.GetMatchingPolicy(ctx, req.Service, "bill", req.Amount); pErr == nil && policy != nil {
+	policy, pErr := s.repo.GetMatchingPolicy(ctx, req.Service, "bill", req.Amount)
+	if pErr != nil {
+		return nil, fmt.Errorf("verifying approval policy: %w", pErr)
+	}
+	if policy != nil {
 		allowSelfApproval = policy.AllowSelfApproval
 		requiredRole = policy.RequiredRole
 	}
 
 	// 1. Check self-approval and lifecycle constraints
 	if checkErr := req.CanApprove(actorID, allowSelfApproval); checkErr != nil {
+		if errors.Is(checkErr, domain.ErrRequestExpired) {
+			req.Status = domain.StatusExpired
+			req.UpdatedAt = time.Now().UTC()
+			_ = s.repo.UpdateRequest(ctx, *req)
+		}
 		return nil, checkErr
 	}
 
@@ -155,11 +175,12 @@ func (s *Service) Approve(ctx context.Context, requestID, actorID, notes string)
 
 	// 3. Enforce four-eyes principle (no duplicate approvals by same actor in multi-level requests)
 	actions, err := s.repo.ListActionsByRequestID(ctx, requestID)
-	if err == nil {
-		for _, a := range actions {
-			if a.Action == "approve" && strings.EqualFold(a.ActorID, actorID) {
-				return nil, domain.ErrDuplicateApproval
-			}
+	if err != nil {
+		return nil, fmt.Errorf("listing audit actions: %w", err)
+	}
+	for _, a := range actions {
+		if a.Action == "approve" && strings.EqualFold(a.ActorID, actorID) {
+			return nil, domain.ErrDuplicateApproval
 		}
 	}
 
@@ -201,6 +222,15 @@ func (s *Service) Reject(ctx context.Context, requestID, actorID, notes string) 
 		return nil, err
 	}
 
+	if req.Status == domain.StatusExpired || (req.ExpiresAt != nil && time.Now().UTC().After(*req.ExpiresAt)) {
+		if req.Status != domain.StatusExpired {
+			req.Status = domain.StatusExpired
+			req.UpdatedAt = time.Now().UTC()
+			_ = s.repo.UpdateRequest(ctx, *req)
+		}
+		return nil, domain.ErrRequestExpired
+	}
+
 	if req.Status != domain.StatusPending {
 		return nil, domain.ErrRequestAlreadyDecided
 	}
@@ -230,7 +260,16 @@ func (s *Service) Reject(ctx context.Context, requestID, actorID, notes string) 
 
 // GetStatus returns the current approval state for an ERP resource.
 func (s *Service) GetStatus(ctx context.Context, serviceName, resourceID string) (*domain.ApprovalRequest, error) {
-	return s.repo.GetRequestByResource(ctx, serviceName, resourceID)
+	req, err := s.repo.GetRequestByResource(ctx, serviceName, resourceID)
+	if err != nil {
+		return nil, err
+	}
+	if req.Status == domain.StatusPending && req.ExpiresAt != nil && time.Now().UTC().After(*req.ExpiresAt) {
+		req.Status = domain.StatusExpired
+		req.UpdatedAt = time.Now().UTC()
+		_ = s.repo.UpdateRequest(ctx, *req)
+	}
+	return req, nil
 }
 
 // GetHistory retrieves the approval request and its full audit trail.
@@ -238,6 +277,11 @@ func (s *Service) GetHistory(ctx context.Context, requestID string) (*domain.App
 	req, err := s.repo.GetRequestByID(ctx, requestID)
 	if err != nil {
 		return nil, nil, err
+	}
+	if req.Status == domain.StatusPending && req.ExpiresAt != nil && time.Now().UTC().After(*req.ExpiresAt) {
+		req.Status = domain.StatusExpired
+		req.UpdatedAt = time.Now().UTC()
+		_ = s.repo.UpdateRequest(ctx, *req)
 	}
 
 	actions, err := s.repo.ListActionsByRequestID(ctx, requestID)

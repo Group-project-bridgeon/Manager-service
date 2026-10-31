@@ -1,5 +1,3 @@
--- +goose Up
-
 -- 1. Check constraints on approval_requests
 ALTER TABLE approval_requests
     ADD CONSTRAINT chk_approval_requests_status
@@ -29,36 +27,15 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_approval_per_resource
     WHERE status IN ('pending', 'approved');
 
 -- 5. Immutability trigger on approval_actions to protect audit history
--- +goose StatementBegin
 CREATE OR REPLACE FUNCTION prevent_audit_log_mutation()
 RETURNS TRIGGER AS $$
 BEGIN
     RAISE EXCEPTION 'approval_actions records are strictly immutable and cannot be updated or deleted';
 END;
 $$ LANGUAGE plpgsql;
--- +goose StatementEnd
 
 DROP TRIGGER IF EXISTS trg_prevent_approval_actions_mutation ON approval_actions;
 CREATE TRIGGER trg_prevent_approval_actions_mutation
 BEFORE UPDATE OR DELETE ON approval_actions
 FOR EACH ROW
 EXECUTE FUNCTION prevent_audit_log_mutation();
-
--- +goose Down
-DROP TRIGGER IF EXISTS trg_prevent_approval_actions_mutation ON approval_actions;
-DROP FUNCTION IF EXISTS prevent_audit_log_mutation();
-
-DROP INDEX IF EXISTS idx_unique_active_approval_per_resource;
-
-ALTER TABLE approval_policies
-    DROP CONSTRAINT IF EXISTS chk_approval_policies_amounts,
-    DROP CONSTRAINT IF EXISTS chk_approval_policies_required_levels;
-
-ALTER TABLE approval_actions
-    DROP CONSTRAINT IF EXISTS chk_approval_actions_action,
-    DROP CONSTRAINT IF EXISTS chk_approval_actions_level;
-
-ALTER TABLE approval_requests
-    DROP CONSTRAINT IF EXISTS chk_approval_requests_status,
-    DROP CONSTRAINT IF EXISTS chk_approval_requests_amount,
-    DROP CONSTRAINT IF EXISTS chk_approval_requests_levels;

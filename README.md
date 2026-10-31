@@ -123,15 +123,18 @@ Configuration is strictly validated at application startup:
 make test             # Run all unit and integration tests with -race
 make lint             # Run golangci-lint
 make build            # Compile statically linked binary into bin/server
-make migrate-up       # Run pending Goose database migrations
-make migrate-down     # Roll back last Goose migration
+make migrate-up       # Run pending database migrations (golang-migrate)
+make migrate-down     # Roll back last database migration
 make migrate-status   # Display applied database migrations
 ```
 
-### 4.3 Running via Docker Compose
-To start Manager-service and PostgreSQL together on the shared `erp-network`:
+### 4.3 Running via Docker Compose (Dev Standalone Only)
+> [!WARNING]
+> `docker-compose.dev.yml` is strictly for standalone local development. **Do not run it alongside the ERP platform**, as it binds conflicting ports (5432, 8080) and uses a standalone postgres database.
+
+To start Manager-service and PostgreSQL together in isolated dev mode:
 ```bash
-docker compose up --build -d
+docker compose -f docker-compose.dev.yml up --build -d
 ```
 The server container awaits the PostgreSQL health check before starting.
 

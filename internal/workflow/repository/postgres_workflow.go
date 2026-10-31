@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/group-project-bridgeon/manager-service/internal/workflow/domain"
@@ -44,6 +45,10 @@ func (r *PostgresWorkflowRepository) CreateRequest(ctx context.Context, req doma
 		req.UpdatedAt,
 	)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return domain.ErrDuplicateSubmission
+		}
 		return fmt.Errorf("inserting approval request: %w", err)
 	}
 

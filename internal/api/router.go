@@ -40,6 +40,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	r.GET("/healthz", health.Liveness)
 	r.GET("/health", health.Liveness)
 	r.GET("/readyz", health.Readiness)
+	r.GET("/ready", health.Readiness)
 
 	// Business API routes (v1) - Protected by JWT Authentication
 	v1 := r.Group("/api/v1")

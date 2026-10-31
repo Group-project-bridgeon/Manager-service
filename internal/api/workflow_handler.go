@@ -112,6 +112,8 @@ func (h *WorkflowHandler) Reject(c *gin.Context) {
 			Error(c, http.StatusConflict, "CONCURRENT_UPDATE", "Request was updated concurrently; please refresh and try again", nil)
 		case errors.Is(err, domain.ErrRequestAlreadyDecided):
 			Error(c, http.StatusConflict, "REQUEST_ALREADY_DECIDED", "Request is already decided", nil)
+		case errors.Is(err, domain.ErrRequestExpired):
+			Error(c, http.StatusGone, "REQUEST_EXPIRED", "Approval request has expired", nil)
 		default:
 			RespondInternalError(c)
 		}

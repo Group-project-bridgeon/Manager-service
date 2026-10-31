@@ -1,3 +1,17 @@
+# ==============================================================================
+# DEV-ONLY / STANDALONE ENVIRONMENT
+# DO NOT RUN ALONGSIDE THE ERP PLATFORM
+#
+# This Docker Compose file is intended strictly for isolated local development
+# of manager-service in standalone mode. Running this alongside the main ERP
+# platform will cause port conflicts (e.g., port 5432 and 8080) and database
+# collisions with the platform postgres instance.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   docker compose -f docker-compose.dev.yml down
+# ==============================================================================
+
 services:
   server:
     build:

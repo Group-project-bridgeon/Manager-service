@@ -554,10 +554,34 @@ func TestFailureAndConcurrencyMatrix(t *testing.T) {
 		req.ExpiresAt = &past
 		_ = repo.UpdateRequest(ctx, *req)
 
-		// Attempting to approve expired request
+		// Attempting to approve expired request returns ErrRequestExpired
 		_, err = svc.Approve(ctx, req.ID, "manager_1", "Late approval")
 		if !errors.Is(err, domain.ErrRequestExpired) {
-			t.Errorf("expected ErrRequestExpired, got: %v", err)
+			t.Errorf("expected ErrRequestExpired on approve, got: %v", err)
+		}
+
+		// Attempting to reject expired request returns ErrRequestExpired
+		_, err = svc.Reject(ctx, req.ID, "manager_1", "Late reject")
+		if !errors.Is(err, domain.ErrRequestExpired) {
+			t.Errorf("expected ErrRequestExpired on reject, got: %v", err)
+		}
+
+		// Querying status reflects expired state
+		statusReq, err := svc.GetStatus(ctx, "purchasing", "bill_exp_1")
+		if err != nil {
+			t.Fatalf("failed getting status: %v", err)
+		}
+		if statusReq.Status != domain.StatusExpired {
+			t.Errorf("expected status expired, got: %s", statusReq.Status)
+		}
+
+		// Resubmission of expired bill is permitted
+		newReq, err := svc.Submit(ctx, "purchasing", "bill_exp_1", "purchaser_1", 22000)
+		if err != nil {
+			t.Fatalf("resubmission of expired bill should succeed, got: %v", err)
+		}
+		if newReq.Status != domain.StatusPending {
+			t.Errorf("expected new request to be pending, got: %s", newReq.Status)
 		}
 	})
 

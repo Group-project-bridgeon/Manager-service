@@ -86,12 +86,12 @@ type ApprovalAction struct {
 
 // CanApprove evaluates whether an actor can approve the request based on business rules.
 func (r *ApprovalRequest) CanApprove(actorID string, allowSelfApproval bool) error {
-	if r.Status != StatusPending {
-		return ErrRequestAlreadyDecided
+	if r.Status == StatusExpired || (r.ExpiresAt != nil && time.Now().UTC().After(*r.ExpiresAt)) {
+		return ErrRequestExpired
 	}
 
-	if r.ExpiresAt != nil && time.Now().UTC().After(*r.ExpiresAt) {
-		return ErrRequestExpired
+	if r.Status != StatusPending {
+		return ErrRequestAlreadyDecided
 	}
 
 	if !allowSelfApproval && strings.EqualFold(r.RequesterID, actorID) {

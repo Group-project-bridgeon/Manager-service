@@ -134,3 +134,19 @@ To start Manager-service and PostgreSQL together on the shared `erp-network`:
 docker compose up --build -d
 ```
 The server container awaits the PostgreSQL health check before starting.
+
+### 4.4 Postman Testing
+A comprehensive Postman test suite is provided in the [`postman/`](file:///home/yadu/project/Grp/Manager-service/postman) directory:
+- [`Manager-Service.postman_collection.json`](file:///home/yadu/project/Grp/Manager-service/postman/Manager-Service.postman_collection.json): Contains 17 requests across 4 folders covering Health checks, Approvals workflow (single & multi-level), RBAC role management, and negative security scenarios (401, 403, 409).
+- [`Manager-Service.postman_environment.json`](file:///home/yadu/project/Grp/Manager-service/postman/Manager-Service.postman_environment.json): Environment variables including `baseUrl` and fresh RS256 JWT tokens.
+
+To refresh tokens or regenerate the Postman files:
+```bash
+make postman
+```
+
+**Steps to run in Postman:**
+1. Open Postman, click **Import**, and select both files from `postman/`.
+2. In the top-right environment selector, choose **Manager Service (Local)**.
+3. Start the Manager service (`make run`).
+4. Execute requests individually or run the full suite using Postman's **Collection Runner**. Variables (such as `approval_id`) automatically chain across requests!

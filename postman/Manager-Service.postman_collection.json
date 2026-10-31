@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "58133870-b11a-4e3c-a0b3-d51cae7a1443",
+    "_postman_id": "ea929920-7820-461a-93a8-99362df70054",
     "name": "Manager Service API",
     "description": "Comprehensive Postman test suite for Manager-service covering JWT Authentication, RBAC, Multi-level Approvals, OCC Concurrency, and Error Handling.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -15,13 +15,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/healthz",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "healthz"
-              ]
+              "raw": "{{baseUrl}}/healthz"
             },
             "description": "Public health check endpoint. Returns 200 OK without requiring authentication."
           },
@@ -49,13 +43,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/health",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "health"
-              ]
+              "raw": "{{baseUrl}}/health"
             },
             "description": "Alias public health check endpoint."
           },
@@ -83,13 +71,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/readyz",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "readyz"
-              ]
+              "raw": "{{baseUrl}}/readyz"
             },
             "description": "Public readiness probe. Pings database connection pool. Returns 200 when healthy, 503 during DB outage."
           },
@@ -135,16 +117,7 @@
               "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"{{resource_id}}\",\n  \"amount\": 35000\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/submit",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "submit"
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/submit"
             },
             "description": "Submits a new purchasing bill for manager approval. Requester ID is derived strictly from JWT principal."
           },
@@ -169,6 +142,7 @@
                   "});",
                   "if (jsonData.data \u0026\u0026 jsonData.data.id) {",
                   "    pm.environment.set(\"approval_id\", jsonData.data.id);",
+                  "    pm.collectionVariables.set(\"approval_id\", jsonData.data.id);",
                   "    console.log(\"Saved approval_id:\", jsonData.data.id);",
                   "}"
                 ]
@@ -187,26 +161,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/status?service=purchasing\u0026resource_id={{resource_id}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "status"
-              ],
-              "query": [
-                {
-                  "key": "service",
-                  "value": "purchasing"
-                },
-                {
-                  "key": "resource_id",
-                  "value": "{{resource_id}}"
-                }
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/status?service=purchasing\u0026resource_id={{resource_id}}"
             },
             "description": "Queries the current approval status for a resource."
           },
@@ -221,7 +176,7 @@
                   "});",
                   "var jsonData = pm.response.json();",
                   "pm.test(\"Matches requested resource_id\", function () {",
-                  "    pm.expect(jsonData.data.resource_id).to.eql(pm.environment.get(\"resource_id\"));",
+                  "    pm.expect(jsonData.data.resource_id).to.eql(pm.variables.get(\"resource_id\"));",
                   "});"
                 ]
               }
@@ -239,16 +194,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/{{approval_id}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "{{approval_id}}"
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/{{approval_id}}"
             },
             "description": "Returns approval request details along with complete immutable audit trail."
           },
@@ -290,17 +236,7 @@
               "raw": "{\n  \"notes\": \"Approved via Postman API test\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/{{approval_id}}/approve",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "{{approval_id}}",
-                "approve"
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/{{approval_id}}/approve"
             },
             "description": "Approver grants level 1 decision. Actor is derived strictly from JWT principal."
           },
@@ -342,16 +278,7 @@
               "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"PO-MULTI-{{$timestamp}}\",\n  \"amount\": 85000\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/submit",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "submit"
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/submit"
             },
             "description": "Amounts ₹50k+ require 2 distinct manager approval levels."
           },
@@ -370,6 +297,7 @@
                   "});",
                   "if (jsonData.data \u0026\u0026 jsonData.data.id) {",
                   "    pm.environment.set(\"multi_approval_id\", jsonData.data.id);",
+                  "    pm.collectionVariables.set(\"multi_approval_id\", jsonData.data.id);",
                   "}"
                 ]
               }
@@ -395,17 +323,7 @@
               "raw": "{\n  \"notes\": \"Exceeded departmental quarterly budget\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/{{multi_approval_id}}/reject",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "{{multi_approval_id}}",
-                "reject"
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/{{multi_approval_id}}/reject"
             },
             "description": "Terminates the workflow request in rejected status."
           },
@@ -443,15 +361,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/roles",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "roles"
-              ]
+              "raw": "{{baseUrl}}/api/v1/roles"
             },
             "description": "Retrieves all registered roles in the system."
           },
@@ -493,15 +403,7 @@
               "raw": "{\n  \"id\": \"{{created_role_id}}\",\n  \"name\": \"Quality Auditor\",\n  \"description\": \"Reviews quality reports and approvals\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/roles",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "roles"
-              ]
+              "raw": "{{baseUrl}}/api/v1/roles"
             },
             "description": "Registers a new custom role."
           },
@@ -516,7 +418,7 @@
                   "});",
                   "var jsonData = pm.response.json();",
                   "pm.test(\"Role matches created_role_id\", function () {",
-                  "    pm.expect(jsonData.data.id).to.eql(pm.environment.get(\"created_role_id\"));",
+                  "    pm.expect(jsonData.data.id).to.eql(pm.variables.get(\"created_role_id\"));",
                   "});"
                 ]
               }
@@ -534,16 +436,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/roles/{{created_role_id}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "roles",
-                "{{created_role_id}}"
-              ]
+              "raw": "{{baseUrl}}/api/v1/roles/{{created_role_id}}"
             },
             "description": "Fetches details of a specific role by its ID."
           },
@@ -584,17 +477,7 @@
               "raw": "{\n  \"role_id\": \"{{created_role_id}}\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "{{test_user_id}}",
-                "roles"
-              ]
+              "raw": "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles"
             },
             "description": "Grants a role to a user. Assigned_by is extracted automatically from the JWT principal."
           },
@@ -627,17 +510,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "{{test_user_id}}",
-                "roles"
-              ]
+              "raw": "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles"
             },
             "description": "Returns all roles currently assigned to a user."
           },
@@ -652,7 +525,7 @@
                   "});",
                   "var jsonData = pm.response.json();",
                   "pm.test(\"Contains newly assigned role\", function () {",
-                  "    var found = jsonData.data.some(function(r) { return r.id === pm.environment.get(\"created_role_id\"); });",
+                  "    var found = jsonData.data.some(function(r) { return r.id === pm.variables.get(\"created_role_id\"); });",
                   "    pm.expect(found).to.be.true;",
                   "});"
                 ]
@@ -679,16 +552,7 @@
               "raw": "{\n  \"user_id\": \"{{test_user_id}}\",\n  \"service\": \"purchasing\",\n  \"resource\": \"bill\",\n  \"action\": \"approve\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/authz/check",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "authz",
-                "check"
-              ]
+              "raw": "{{baseUrl}}/api/v1/authz/check"
             },
             "description": "Evaluates whether user holds authority to execute an action on a service resource."
           },
@@ -721,18 +585,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles/{{created_role_id}}",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "users",
-                "{{test_user_id}}",
-                "roles",
-                "{{created_role_id}}"
-              ]
+              "raw": "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles/{{created_role_id}}"
             },
             "description": "Revokes a granted role from a user."
           },
@@ -761,26 +614,7 @@
             "method": "GET",
             "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/status?service=purchasing\u0026resource_id=test",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "status"
-              ],
-              "query": [
-                {
-                  "key": "service",
-                  "value": "purchasing"
-                },
-                {
-                  "key": "resource_id",
-                  "value": "test"
-                }
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/status?service=purchasing\u0026resource_id=test"
             },
             "description": "Calling protected endpoint without Authorization header must return 401 with WWW-Authenticate header."
           },
@@ -816,26 +650,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/status?service=purchasing\u0026resource_id=test",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "status"
-              ],
-              "query": [
-                {
-                  "key": "service",
-                  "value": "purchasing"
-                },
-                {
-                  "key": "resource_id",
-                  "value": "test"
-                }
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/status?service=purchasing\u0026resource_id=test"
             },
             "description": "Presents an expired token. Must return 401 with code TOKEN_EXPIRED."
           },
@@ -876,16 +691,7 @@
               "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"test\",\n  \"amount\": 1000\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/submit",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "submit"
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/submit"
             },
             "description": "Caller lacks manager.approvals:submit grant. Must return 403 PERMISSION_DENIED."
           },
@@ -926,17 +732,7 @@
               "raw": "{\n  \"notes\": \"Attempting to approve my own bill\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/{{multi_approval_id}}/approve",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "{{multi_approval_id}}",
-                "approve"
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/{{multi_approval_id}}/approve"
             },
             "description": "If purchaser attempts to approve their own request, service forbids self-approval with 403 SELF_APPROVAL_FORBIDDEN."
           },
@@ -946,8 +742,6 @@
               "script": {
                 "type": "text/javascript",
                 "exec": [
-                  "// Note: If multi_approval_id was already decided (e.g. rejected), 409 is returned.",
-                  "// If pending and same requester, 403 SELF_APPROVAL_FORBIDDEN is returned.",
                   "pm.test(\"Returns 403 or 409 error envelope\", function () {",
                   "    pm.expect([403, 409]).to.include(pm.response.code);",
                   "});"
@@ -975,16 +769,7 @@
               "raw": "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"{{resource_id}}\",\n  \"amount\": 35000\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/submit",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "submit"
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/submit"
             },
             "description": "Submitting the same resource ID that already has an approved or pending workflow returns 409 Conflict."
           },
@@ -1025,17 +810,7 @@
               "raw": "{\n  \"notes\": \"Duplicate approval attempt\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/approvals/{{approval_id}}/approve",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "approvals",
-                "{{approval_id}}",
-                "approve"
-              ]
+              "raw": "{{baseUrl}}/api/v1/approvals/{{approval_id}}/approve"
             },
             "description": "Approving an already approved request returns 409 REQUEST_ALREADY_DECIDED."
           },
@@ -1058,6 +833,74 @@
           ]
         }
       ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "purchaser_token",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjExMTExMTExLTExMTEtMTExMS0xMTExLTExMTExMTExMTExMSIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNjc2NSwibmJmIjoxNzkzNDI1OTI1LCJpYXQiOjE3OTM0MjU5MjUsInVzZXJfaWQiOiIxMTExMTExMS0xMTExLTExMTEtMTExMS0xMTExMTExMTExMTEiLCJlbWFpbCI6InB1cmNoYXNlckBlcnAubG9jYWwiLCJ0b2tlbl92ZXJzaW9uIjoxLCJwZXJtaXNzaW9ucyI6WyJtYW5hZ2VyLmFwcHJvdmFsczpzdWJtaXQiLCJtYW5hZ2VyLmFwcHJvdmFsczpyZWFkIl19.Fox7HL2yrKNfZqMTHt9vhedA29K3VhSBEp__KKfp8Twx-fRhz_5MHvHZ9Ldfc-zodE8E_zNmEqVNE-vlqhfFuAxghFCbqZJwP14ZmwK2NkmuMXCAGUcryZMdFmexgIyqSpwUszd58PmDYBG2QdpDhB0GBzh9wzqUtvOSUq9ifk5hOQwumujB5DwfFlBIE69ImbewzDKOpu8BeOfhnr63TOggxLSS61jUL0uUpWHFUXZuF4axaVmR1odpnGjXAoWBTKqVdQNc2As4FzAOftQX1ENdGbGvO6wSV6uBJuhaVm_DlnDH8WR4pZTy3OzJce_rEyqo7huIOmzhax3VowMlLA",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "manager_token",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjIyMjIyMjIyLTIyMjItMjIyMi0yMjIyLTIyMjIyMjIyMjIyMiIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNjc2NSwibmJmIjoxNzkzNDI1OTI1LCJpYXQiOjE3OTM0MjU5MjUsInVzZXJfaWQiOiIyMjIyMjIyMi0yMjIyLTIyMjItMjIyMi0yMjIyMjIyMjIyMjIiLCJlbWFpbCI6Im1hbmFnZXJAZXJwLmxvY2FsIiwidG9rZW5fdmVyc2lvbiI6MSwicGVybWlzc2lvbnMiOlsibWFuYWdlci5hcHByb3ZhbHM6YXBwcm92ZSIsIm1hbmFnZXIuYXBwcm92YWxzOnJlamVjdCIsIm1hbmFnZXIuYXBwcm92YWxzOnJlYWQiXX0.aRJK6HybU3SvyAfbWh8I7AzLJEvgG4KxWgC_u1E0KITa87Ri-95yBlHcT0EHavSbsFqSNrlXImGzzRyX-RBeqyhXuJy3my7VUu1G3aAJ164uDmIXfIB_I8ccTIfVBU9uu8tQOHtaV27Rva-vWqDIn1emxqc_9kjkuQ1k6_KQc11A5urcxUs_sPNu9MIg2kqsLPDRUj1J8EncHq-zqwByxC508N559PSzpOMY2r1LlsPJ9Yu2GHt8saCUZG1wQsbtSi172QyXOBb0K_bN__e8k_NClq9rDlmE0s3SNnb_tyTjW4b_kp06U-i-tDeCzzStGs6enmegjVxqOesTlSGg9A",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "admin_token",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjMzMzMzMzMzLTMzMzMtMzMzMy0zMzMzLTMzMzMzMzMzMzMzMyIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNjc2NSwibmJmIjoxNzkzNDI1OTI1LCJpYXQiOjE3OTM0MjU5MjUsInVzZXJfaWQiOiIzMzMzMzMzMy0zMzMzLTMzMzMtMzMzMy0zMzMzMzMzMzMzMzMiLCJlbWFpbCI6ImFkbWluQGVycC5sb2NhbCIsInRva2VuX3ZlcnNpb24iOjEsInBlcm1pc3Npb25zIjpbIm1hbmFnZXIuYXBwcm92YWxzOnN1Ym1pdCIsIm1hbmFnZXIuYXBwcm92YWxzOnJlYWQiLCJtYW5hZ2VyLmFwcHJvdmFsczphcHByb3ZlIiwibWFuYWdlci5hcHByb3ZhbHM6cmVqZWN0IiwibWFuYWdlci5yYmFjOm1hbmFnZSIsIm1hbmFnZXIuYXV0aHo6Y2hlY2siXX0.J9P40TwF5KDEKFHUfSowZTI2oGGySRFceJQKTUEEj08wwBH9i_XozR8DqS1mxvpn1Myixm5VWM8HpIhaes1Rasks87R8WFKWVqk5u-TpknBj13PfT10Zx2J69aki95xNTFV2rYZpVB4xGkkqb2pDzbE3Cw-0URR5fCOrBeCEYnu3Uj2NDG15XFWUWEuN2BdP7BZ-tVg105aNmXOirwhYFUF6tNbpLIGF0ijR3IvSRYtIs-VwB4t1_DnRdlkM19DmfN2d7cwthl3fxC5pRZ9Az5nnGG61X7L1Ww5qduGRd3VEFPXOofjRiQ1MX8nVY8wZRwo2hib_Vn0gP7PGBvpZaw",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "no_perm_token",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjQ0NDQ0NDQ0LTQ0NDQtNDQ0NC00NDQ0LTQ0NDQ0NDQ0NDQ0NCIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNjc2NSwibmJmIjoxNzkzNDI1OTI1LCJpYXQiOjE3OTM0MjU5MjUsInVzZXJfaWQiOiI0NDQ0NDQ0NC00NDQ0LTQ0NDQtNDQ0NC00NDQ0NDQ0NDQ0NDQiLCJlbWFpbCI6Imd1ZXN0QGVycC5sb2NhbCIsInRva2VuX3ZlcnNpb24iOjEsInBlcm1pc3Npb25zIjpbXX0.epWKjePd7Bm5T0vvmawOysFuujUvdNYvAxUuqqwrE65us7_35OnF2EHpcNV6cAWUSVRvjcMBwkwQnB9Lz-b2MiPQ3SjOnFEgMaMcVHHtBxNJ1aiN2HT9fDD0JkSfI5ct6uW9nAt17bEI2sFJ48X2OWBK59_BHHEwM0FGfnllRU8VjkX_H39RnGJfX6Gk-6ud6rEDgI6hUisc4QniuUZd8SiSoKXxK0HReenpn0ulcH3WS0Z6cAXeDSq8YJEXY60Xgyc1jeL0IvjoDNTTEQX1pcQODTxK73NByP7SElduFm9WBSaLUkePfK0rJ37UfFmsgmJ2fjFpuirJ-xX0oiJo7Q",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "expired_token",
+      "value": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJlcnAtYXV0aCIsInN1YiI6IjU1NTU1NTU1LTU1NTUtNTU1NS01NTU1LTU1NTU1NTU1NTU1NSIsImF1ZCI6WyJlcnAtYXBpIl0sImV4cCI6MTc5MzQyNTYyNSwibmJmIjoxNzkzNDI0NzI1LCJpYXQiOjE3OTM0MjQ3MjUsInVzZXJfaWQiOiI1NTU1NTU1NS01NTU1LTU1NTUtNTU1NS01NTU1NTU1NTU1NTUiLCJlbWFpbCI6ImV4cGlyZWRAZXJwLmxvY2FsIiwidG9rZW5fdmVyc2lvbiI6MSwicGVybWlzc2lvbnMiOlsibWFuYWdlci5hcHByb3ZhbHM6cmVhZCJdfQ.FpfyPkbtNRaZyLNU3xP9rw5wf37wRIJWfbYrIRAO3i0qKKdzDKeLCLo8wGY_J1mlnY8toN6J8iDAVdrbnFh3DMDOJU-06wgqSVOkxbecmAEIwTx3YFbS0nUaSqEy7fWDPG29F5-SGN1Vze9wLlnzQWN1t7wFzi__ARfi1J_VAJefKDPEPsLK4BEpHPWWJRIy9a6H47SIZYNF8tkGdrY0BLyiyuy-f09XH2SP8XQ_LaCF7uaR_PDQFihi9spaJIpOoX7fXyLjbEDyvDacd-vyny0hOxwfnJDjjBLu4r7dLhAN3vmO_AmHglahSyBntK-aKGNup026KWkzcB8a6HH9Sg",
+      "type": "secret",
+      "enabled": true
+    },
+    {
+      "key": "resource_id",
+      "value": "PO-POSTMAN-25925",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "approval_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "multi_approval_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "test_user_id",
+      "value": "a2186862-4e2f-4d2a-b7b2-a694d02bcae2",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "created_role_id",
+      "value": "role_5925",
+      "type": "default",
+      "enabled": true
     }
   ]
 }

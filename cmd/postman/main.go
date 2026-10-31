@@ -44,15 +44,7 @@ type postmanBody struct {
 }
 
 type postmanURL struct {
-	Raw   string         `json:"raw"`
-	Host  []string       `json:"host"`
-	Path  []string       `json:"path"`
-	Query []postmanQuery `json:"query,omitempty"`
-}
-
-type postmanQuery struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+	Raw string `json:"raw"`
 }
 
 type postmanRequest struct {
@@ -88,8 +80,9 @@ type postmanInfo struct {
 }
 
 type postmanCollection struct {
-	Info postmanInfo   `json:"info"`
-	Item []postmanItem `json:"item"`
+	Info     postmanInfo          `json:"info"`
+	Item     []postmanItem        `json:"item"`
+	Variable []postmanEnvVariable `json:"variable,omitempty"`
 }
 
 func main() {
@@ -179,28 +172,30 @@ func main() {
 	noPermToken := mint(guestID, "guest@erp.local", []string{}, now, now.Add(ttl))
 	expiredToken := mint(expiredID, "expired@erp.local", []string{api.PermApprovalsRead}, now.Add(-20*time.Minute), now.Add(-5*time.Minute))
 
-	// 1. Generate Environment File
 	resourceID := fmt.Sprintf("PO-POSTMAN-%d", time.Now().Unix()%100000)
 	createdRoleID := fmt.Sprintf("role_%d", time.Now().Unix()%10000)
 	testUserID := uuid.New().String()
 
+	vars := []postmanEnvVariable{
+		{Key: "baseUrl", Value: "http://localhost:8080", Type: "default", Enabled: true},
+		{Key: "purchaser_token", Value: purchaserToken, Type: "secret", Enabled: true},
+		{Key: "manager_token", Value: managerToken, Type: "secret", Enabled: true},
+		{Key: "admin_token", Value: adminToken, Type: "secret", Enabled: true},
+		{Key: "no_perm_token", Value: noPermToken, Type: "secret", Enabled: true},
+		{Key: "expired_token", Value: expiredToken, Type: "secret", Enabled: true},
+		{Key: "resource_id", Value: resourceID, Type: "default", Enabled: true},
+		{Key: "approval_id", Value: "", Type: "default", Enabled: true},
+		{Key: "multi_approval_id", Value: "", Type: "default", Enabled: true},
+		{Key: "test_user_id", Value: testUserID, Type: "default", Enabled: true},
+		{Key: "created_role_id", Value: createdRoleID, Type: "default", Enabled: true},
+	}
+
+	// 1. Generate Environment File
 	env := postmanEnvironment{
 		ID:                   uuid.New().String(),
 		Name:                 "Manager Service (Local)",
 		PostmanVariableScope: "environment",
-		Values: []postmanEnvVariable{
-			{Key: "baseUrl", Value: "http://localhost:8080", Type: "default", Enabled: true},
-			{Key: "purchaser_token", Value: purchaserToken, Type: "secret", Enabled: true},
-			{Key: "manager_token", Value: managerToken, Type: "secret", Enabled: true},
-			{Key: "admin_token", Value: adminToken, Type: "secret", Enabled: true},
-			{Key: "no_perm_token", Value: noPermToken, Type: "secret", Enabled: true},
-			{Key: "expired_token", Value: expiredToken, Type: "secret", Enabled: true},
-			{Key: "resource_id", Value: resourceID, Type: "default", Enabled: true},
-			{Key: "approval_id", Value: "", Type: "default", Enabled: true},
-			{Key: "multi_approval_id", Value: "", Type: "default", Enabled: true},
-			{Key: "test_user_id", Value: testUserID, Type: "default", Enabled: true},
-			{Key: "created_role_id", Value: createdRoleID, Type: "default", Enabled: true},
-		},
+		Values:               vars,
 	}
 
 	envFile := filepath.Join(outDir, "Manager-Service.postman_environment.json")
@@ -214,8 +209,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 2. Generate Collection File
-	col := buildCollection()
+	// 2. Generate Collection File (embedding the variables directly for zero-config execution)
+	col := buildCollection(vars)
 	colFile := filepath.Join(outDir, "Manager-Service.postman_collection.json")
 	colJSON, cErr := json.MarshalIndent(col, "", "  ")
 	if cErr != nil {
@@ -235,12 +230,12 @@ func main() {
 	fmt.Println("=================================================================")
 	fmt.Println("\nTo test in Postman:")
 	fmt.Println(" 1. In Postman, click 'Import' and select both JSON files from postman/")
-	fmt.Println(" 2. In top right corner, select the environment 'Manager Service (Local)'")
+	fmt.Println(" 2. In top right corner, select the environment 'Manager Service (Local)' (or leave as default)")
 	fmt.Println(" 3. Run requests individually or run entire collection via Collection Runner!")
 	fmt.Println("=================================================================")
 }
 
-func buildCollection() postmanCollection {
+func buildCollection(vars []postmanEnvVariable) postmanCollection {
 	return postmanCollection{
 		Info: postmanInfo{
 			PostmanID:   uuid.New().String(),
@@ -248,6 +243,7 @@ func buildCollection() postmanCollection {
 			Description: "Comprehensive Postman test suite for Manager-service covering JWT Authentication, RBAC, Multi-level Approvals, OCC Concurrency, and Error Handling.",
 			Schema:      "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
 		},
+		Variable: vars,
 		Item: []postmanItem{
 			// Folder 1: Health & Readiness
 			{
@@ -259,9 +255,7 @@ func buildCollection() postmanCollection {
 							Method: "GET",
 							Header: []postmanHeader{},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/healthz",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"healthz"},
+								Raw: "{{baseUrl}}/healthz",
 							},
 							Description: "Public health check endpoint. Returns 200 OK without requiring authentication.",
 						},
@@ -289,9 +283,7 @@ func buildCollection() postmanCollection {
 							Method: "GET",
 							Header: []postmanHeader{},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/health",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"health"},
+								Raw: "{{baseUrl}}/health",
 							},
 							Description: "Alias public health check endpoint.",
 						},
@@ -319,9 +311,7 @@ func buildCollection() postmanCollection {
 							Method: "GET",
 							Header: []postmanHeader{},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/readyz",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"readyz"},
+								Raw: "{{baseUrl}}/readyz",
 							},
 							Description: "Public readiness probe. Pings database connection pool. Returns 200 when healthy, 503 during DB outage.",
 						},
@@ -363,9 +353,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"{{resource_id}}\",\n  \"amount\": 35000\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/approvals/submit",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "approvals", "submit"},
+								Raw: "{{baseUrl}}/api/v1/approvals/submit",
 							},
 							Description: "Submits a new purchasing bill for manager approval. Requester ID is derived strictly from JWT principal.",
 						},
@@ -390,6 +378,7 @@ func buildCollection() postmanCollection {
 										"});",
 										"if (jsonData.data && jsonData.data.id) {",
 										"    pm.environment.set(\"approval_id\", jsonData.data.id);",
+										"    pm.collectionVariables.set(\"approval_id\", jsonData.data.id);",
 										"    console.log(\"Saved approval_id:\", jsonData.data.id);",
 										"}",
 									},
@@ -405,10 +394,7 @@ func buildCollection() postmanCollection {
 								{Key: "Authorization", Value: "Bearer {{purchaser_token}}"},
 							},
 							URL: postmanURL{
-								Raw:   "{{baseUrl}}/api/v1/approvals/status?service=purchasing&resource_id={{resource_id}}",
-								Host:  []string{"{{baseUrl}}"},
-								Path:  []string{"api", "v1", "approvals", "status"},
-								Query: []postmanQuery{{Key: "service", Value: "purchasing"}, {Key: "resource_id", Value: "{{resource_id}}"}},
+								Raw: "{{baseUrl}}/api/v1/approvals/status?service=purchasing&resource_id={{resource_id}}",
 							},
 							Description: "Queries the current approval status for a resource.",
 						},
@@ -423,7 +409,7 @@ func buildCollection() postmanCollection {
 										"});",
 										"var jsonData = pm.response.json();",
 										"pm.test(\"Matches requested resource_id\", function () {",
-										"    pm.expect(jsonData.data.resource_id).to.eql(pm.environment.get(\"resource_id\"));",
+										"    pm.expect(jsonData.data.resource_id).to.eql(pm.variables.get(\"resource_id\"));",
 										"});",
 									},
 								},
@@ -438,9 +424,7 @@ func buildCollection() postmanCollection {
 								{Key: "Authorization", Value: "Bearer {{manager_token}}"},
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/approvals/{{approval_id}}",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "approvals", "{{approval_id}}"},
+								Raw: "{{baseUrl}}/api/v1/approvals/{{approval_id}}",
 							},
 							Description: "Returns approval request details along with complete immutable audit trail.",
 						},
@@ -476,9 +460,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"notes\": \"Approved via Postman API test\"\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/approvals/{{approval_id}}/approve",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "approvals", "{{approval_id}}", "approve"},
+								Raw: "{{baseUrl}}/api/v1/approvals/{{approval_id}}/approve",
 							},
 							Description: "Approver grants level 1 decision. Actor is derived strictly from JWT principal.",
 						},
@@ -514,9 +496,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"PO-MULTI-{{$timestamp}}\",\n  \"amount\": 85000\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/approvals/submit",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "approvals", "submit"},
+								Raw: "{{baseUrl}}/api/v1/approvals/submit",
 							},
 							Description: "Amounts ₹50k+ require 2 distinct manager approval levels.",
 						},
@@ -535,6 +515,7 @@ func buildCollection() postmanCollection {
 										"});",
 										"if (jsonData.data && jsonData.data.id) {",
 										"    pm.environment.set(\"multi_approval_id\", jsonData.data.id);",
+										"    pm.collectionVariables.set(\"multi_approval_id\", jsonData.data.id);",
 										"}",
 									},
 								},
@@ -554,9 +535,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"notes\": \"Exceeded departmental quarterly budget\"\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/approvals/{{multi_approval_id}}/reject",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "approvals", "{{multi_approval_id}}", "reject"},
+								Raw: "{{baseUrl}}/api/v1/approvals/{{multi_approval_id}}/reject",
 							},
 							Description: "Terminates the workflow request in rejected status.",
 						},
@@ -593,9 +572,7 @@ func buildCollection() postmanCollection {
 								{Key: "Authorization", Value: "Bearer {{admin_token}}"},
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/roles",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "roles"},
+								Raw: "{{baseUrl}}/api/v1/roles",
 							},
 							Description: "Retrieves all registered roles in the system.",
 						},
@@ -631,9 +608,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"id\": \"{{created_role_id}}\",\n  \"name\": \"Quality Auditor\",\n  \"description\": \"Reviews quality reports and approvals\"\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/roles",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "roles"},
+								Raw: "{{baseUrl}}/api/v1/roles",
 							},
 							Description: "Registers a new custom role.",
 						},
@@ -648,7 +623,7 @@ func buildCollection() postmanCollection {
 										"});",
 										"var jsonData = pm.response.json();",
 										"pm.test(\"Role matches created_role_id\", function () {",
-										"    pm.expect(jsonData.data.id).to.eql(pm.environment.get(\"created_role_id\"));",
+										"    pm.expect(jsonData.data.id).to.eql(pm.variables.get(\"created_role_id\"));",
 										"});",
 									},
 								},
@@ -663,9 +638,7 @@ func buildCollection() postmanCollection {
 								{Key: "Authorization", Value: "Bearer {{admin_token}}"},
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/roles/{{created_role_id}}",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "roles", "{{created_role_id}}"},
+								Raw: "{{baseUrl}}/api/v1/roles/{{created_role_id}}",
 							},
 							Description: "Fetches details of a specific role by its ID.",
 						},
@@ -700,9 +673,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"role_id\": \"{{created_role_id}}\"\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "users", "{{test_user_id}}", "roles"},
+								Raw: "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles",
 							},
 							Description: "Grants a role to a user. Assigned_by is extracted automatically from the JWT principal.",
 						},
@@ -732,9 +703,7 @@ func buildCollection() postmanCollection {
 								{Key: "Authorization", Value: "Bearer {{admin_token}}"},
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "users", "{{test_user_id}}", "roles"},
+								Raw: "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles",
 							},
 							Description: "Returns all roles currently assigned to a user.",
 						},
@@ -749,7 +718,7 @@ func buildCollection() postmanCollection {
 										"});",
 										"var jsonData = pm.response.json();",
 										"pm.test(\"Contains newly assigned role\", function () {",
-										"    var found = jsonData.data.some(function(r) { return r.id === pm.environment.get(\"created_role_id\"); });",
+										"    var found = jsonData.data.some(function(r) { return r.id === pm.variables.get(\"created_role_id\"); });",
 										"    pm.expect(found).to.be.true;",
 										"});",
 									},
@@ -770,9 +739,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"user_id\": \"{{test_user_id}}\",\n  \"service\": \"purchasing\",\n  \"resource\": \"bill\",\n  \"action\": \"approve\"\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/authz/check",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "authz", "check"},
+								Raw: "{{baseUrl}}/api/v1/authz/check",
 							},
 							Description: "Evaluates whether user holds authority to execute an action on a service resource.",
 						},
@@ -802,9 +769,7 @@ func buildCollection() postmanCollection {
 								{Key: "Authorization", Value: "Bearer {{admin_token}}"},
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles/{{created_role_id}}",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "users", "{{test_user_id}}", "roles", "{{created_role_id}}"},
+								Raw: "{{baseUrl}}/api/v1/users/{{test_user_id}}/roles/{{created_role_id}}",
 							},
 							Description: "Revokes a granted role from a user.",
 						},
@@ -835,10 +800,7 @@ func buildCollection() postmanCollection {
 							Method: "GET",
 							Header: []postmanHeader{},
 							URL: postmanURL{
-								Raw:   "{{baseUrl}}/api/v1/approvals/status?service=purchasing&resource_id=test",
-								Host:  []string{"{{baseUrl}}"},
-								Path:  []string{"api", "v1", "approvals", "status"},
-								Query: []postmanQuery{{Key: "service", Value: "purchasing"}, {Key: "resource_id", Value: "test"}},
+								Raw: "{{baseUrl}}/api/v1/approvals/status?service=purchasing&resource_id=test",
 							},
 							Description: "Calling protected endpoint without Authorization header must return 401 with WWW-Authenticate header.",
 						},
@@ -871,10 +833,7 @@ func buildCollection() postmanCollection {
 								{Key: "Authorization", Value: "Bearer {{expired_token}}"},
 							},
 							URL: postmanURL{
-								Raw:   "{{baseUrl}}/api/v1/approvals/status?service=purchasing&resource_id=test",
-								Host:  []string{"{{baseUrl}}"},
-								Path:  []string{"api", "v1", "approvals", "status"},
-								Query: []postmanQuery{{Key: "service", Value: "purchasing"}, {Key: "resource_id", Value: "test"}},
+								Raw: "{{baseUrl}}/api/v1/approvals/status?service=purchasing&resource_id=test",
 							},
 							Description: "Presents an expired token. Must return 401 with code TOKEN_EXPIRED.",
 						},
@@ -909,9 +868,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"test\",\n  \"amount\": 1000\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/approvals/submit",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "approvals", "submit"},
+								Raw: "{{baseUrl}}/api/v1/approvals/submit",
 							},
 							Description: "Caller lacks manager.approvals:submit grant. Must return 403 PERMISSION_DENIED.",
 						},
@@ -946,9 +903,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"notes\": \"Attempting to approve my own bill\"\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/approvals/{{multi_approval_id}}/approve",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "approvals", "{{multi_approval_id}}", "approve"},
+								Raw: "{{baseUrl}}/api/v1/approvals/{{multi_approval_id}}/approve",
 							},
 							Description: "If purchaser attempts to approve their own request, service forbids self-approval with 403 SELF_APPROVAL_FORBIDDEN.",
 						},
@@ -958,8 +913,6 @@ func buildCollection() postmanCollection {
 								Script: postmanScript{
 									Type: "text/javascript",
 									Exec: []string{
-										"// Note: If multi_approval_id was already decided (e.g. rejected), 409 is returned.",
-										"// If pending and same requester, 403 SELF_APPROVAL_FORBIDDEN is returned.",
 										"pm.test(\"Returns 403 or 409 error envelope\", function () {",
 										"    pm.expect([403, 409]).to.include(pm.response.code);",
 										"});",
@@ -981,9 +934,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"service\": \"purchasing\",\n  \"resource_id\": \"{{resource_id}}\",\n  \"amount\": 35000\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/approvals/submit",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "approvals", "submit"},
+								Raw: "{{baseUrl}}/api/v1/approvals/submit",
 							},
 							Description: "Submitting the same resource ID that already has an approved or pending workflow returns 409 Conflict.",
 						},
@@ -1018,9 +969,7 @@ func buildCollection() postmanCollection {
 								Raw:  "{\n  \"notes\": \"Duplicate approval attempt\"\n}",
 							},
 							URL: postmanURL{
-								Raw:  "{{baseUrl}}/api/v1/approvals/{{approval_id}}/approve",
-								Host: []string{"{{baseUrl}}"},
-								Path: []string{"api", "v1", "approvals", "{{approval_id}}", "approve"},
+								Raw: "{{baseUrl}}/api/v1/approvals/{{approval_id}}/approve",
 							},
 							Description: "Approving an already approved request returns 409 REQUEST_ALREADY_DECIDED.",
 						},

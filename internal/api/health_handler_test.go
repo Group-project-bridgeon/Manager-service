@@ -93,7 +93,7 @@ func TestHealthEndpoints(t *testing.T) {
 			AuthVerifier: verifier,
 		})
 
-		for _, path := range []string{"/healthz", "/readyz"} {
+		for _, path := range []string{"/healthz", "/health", "/readyz"} {
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(http.MethodGet, path, nil)
 			r.ServeHTTP(w, req)

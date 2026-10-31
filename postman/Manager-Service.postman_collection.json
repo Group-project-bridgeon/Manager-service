@@ -1,6 +1,6 @@
 {
   "info": {
-    "_postman_id": "c25fc352-615b-4d73-a50a-f12f7a1571ef",
+    "_postman_id": "58133870-b11a-4e3c-a0b3-d51cae7a1443",
     "name": "Manager Service API",
     "description": "Comprehensive Postman test suite for Manager-service covering JWT Authentication, RBAC, Multi-level Approvals, OCC Concurrency, and Error Handling.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
@@ -35,6 +35,40 @@
                   "    pm.response.to.have.status(200);",
                   "});",
                   "pm.test(\"Liveness response contains status ok\", function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.status).to.eql(\"ok\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Health Check (/health)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Alias public health check endpoint."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Health response contains status ok\", function () {",
                   "    var jsonData = pm.response.json();",
                   "    pm.expect(jsonData.status).to.eql(\"ok\");",
                   "});"

@@ -38,6 +38,7 @@ func NewRouter(cfg RouterConfig) *gin.Engine {
 	// Health probes (Public endpoints)
 	health := NewHealthHandler(cfg.Checker)
 	r.GET("/healthz", health.Liveness)
+	r.GET("/health", health.Liveness)
 	r.GET("/readyz", health.Readiness)
 
 	// Business API routes (v1) - Protected by JWT Authentication

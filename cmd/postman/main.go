@@ -284,6 +284,36 @@ func buildCollection() postmanCollection {
 						},
 					},
 					{
+						Name: "Health Check (/health)",
+						Request: &postmanRequest{
+							Method: "GET",
+							Header: []postmanHeader{},
+							URL: postmanURL{
+								Raw:  "{{baseUrl}}/health",
+								Host: []string{"{{baseUrl}}"},
+								Path: []string{"health"},
+							},
+							Description: "Alias public health check endpoint.",
+						},
+						Event: []postmanEvent{
+							{
+								Listen: "test",
+								Script: postmanScript{
+									Type: "text/javascript",
+									Exec: []string{
+										"pm.test(\"Status code is 200\", function () {",
+										"    pm.response.to.have.status(200);",
+										"});",
+										"pm.test(\"Health response contains status ok\", function () {",
+										"    var jsonData = pm.response.json();",
+										"    pm.expect(jsonData.status).to.eql(\"ok\");",
+										"});",
+									},
+								},
+							},
+						},
+					},
+					{
 						Name: "Readiness Probe (/readyz)",
 						Request: &postmanRequest{
 							Method: "GET",
